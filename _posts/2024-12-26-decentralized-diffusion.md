@@ -21,19 +21,19 @@ typograms: true
 
 authors:
   - name: David McAllister
-    url: "https://en.wikipedia.org/wiki/Albert_Einstein"
+    url: "https://mcallisterdavid.com/"
     affiliations:
       name: UC Berkeley
   - name: Matthew Tancik
-    url: "https://en.wikipedia.org/wiki/Boris_Podolsky"
+    url: "https://www.matthewtancik.com/about-me"
     affiliations:
       name: Luma AI
   - name: Jiaming Song
-    url: "https://en.wikipedia.org/wiki/Nathan_Rosen"
+    url: "https://tsong.me/"
     affiliations:
       name: Luma AI
   - name: Angjoo Kanazawa
-    url: "https://en.wikipedia.org/wiki/Nathan_Rosen"
+    url: "https://people.eecs.berkeley.edu/~kanazawa/"
     affiliations:
       name: UC Berkeley
 
