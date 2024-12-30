@@ -87,7 +87,7 @@ This is cost-prohibitive. Academic labs can't build specialized clusters with cu
   <img src="{{ '/assets/img/decentralized_diffusion/teaser_images.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
 </div>
 <div class="caption" style="margin-top: 5px;">
-    Some samples from our 8x3B parameter model, trained with just eight independent GPU nodes in less than a week.
+    Some samples from our Decentralized Diffusion Model, trained with just eight independent GPU nodes in less than a week.
 </div>
 
 In this post, we present a simple, geometrically intuitive view on diffusion and flow models from which Decentralized Diffusion Models arrive naturally. We also highlight their strong results and implications for training hardware. DDMs make possible <b>simpler training systems</b> that produce <b>better models</b>.
