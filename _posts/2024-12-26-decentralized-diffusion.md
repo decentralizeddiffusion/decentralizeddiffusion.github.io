@@ -3,7 +3,7 @@ layout: distill
 title: Decentralized Diffusion
 description: Train diffusion models across GPU clusters without networking bottlenecks.
 tags: distill formatting
-giscus_comments: true
+giscus_comments: false
 date: 2024-12-25
 permalink: /
 featured: true
