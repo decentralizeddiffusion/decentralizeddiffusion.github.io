@@ -20,7 +20,7 @@ tikzjax: true
 typograms: true
 
 authors:
-  - name: David McAllister
+  - name: David McAllister*
     url: "https://mcallisterdavid.com/"
     affiliations:
       name: UC Berkeley
