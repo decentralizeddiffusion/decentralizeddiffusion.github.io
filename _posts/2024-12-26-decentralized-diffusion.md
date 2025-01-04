@@ -54,7 +54,7 @@ toc:
     #   - name: Example Child Subsection 2
   - name: Decentralized Diffusion Models
   - name: Why DDMs?
-
+  - name: Simple Implementation
 # Below is an example of injecting additional post-specific styles.
 # If you use this post as a template, delete this _styles block.
 _styles: >
