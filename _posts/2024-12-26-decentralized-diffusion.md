@@ -1,6 +1,6 @@
 ---
 layout: distill
-title: Decentralized Diffusion
+title: Decentralized Diffusion Models
 description: Train diffusion models across GPU clusters without networking bottlenecks.
 tags: distill formatting
 giscus_comments: false
@@ -20,7 +20,7 @@ tikzjax: true
 typograms: true
 
 authors:
-  - name: David McAllister*
+  - name: David McAllister
     url: "https://mcallisterdavid.com/"
     affiliations:
       name: UC Berkeley
@@ -114,7 +114,7 @@ In the following live plot:
 - Each path, $u_t(x_t\|x_0)$, is drawn in <b style="color: #2cc779;">turquoise</b> and its opacity represents its weight.
 - The noisy latent ($x_t$) is <b style="color: #F84643;">red</b>. Drag it around to see how each training example affects the denoising path at different values of $x_t$.
 - The <b style="color: #F84643;">red</b> dotted line shows the denoising path, AKA the marginal flow evaluated at $x_t$.
-- The <b>slider</b> below simulates the denoisinig (to lower $t$) and the noising (to higher $t$) processes.
+- The <b>slider</b> below simulates the denoising (to lower $t$) and the noising (to higher $t$) processes.
 
 <div class="l-page">
   <iframe src="{{ '/assets/plotly/plot_one.html' | relative_url }}" frameborder='0' scrolling='no' height="620px" width="100%" style="border: 1px dashed grey;"></iframe>
