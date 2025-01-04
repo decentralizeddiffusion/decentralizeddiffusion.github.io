@@ -76,18 +76,18 @@ _styles: >
 
 ## Motivation
 
-State of the art image and video diffusion models train on thousands of GPUs that distribute work then communicate results before each optimization step. This means that training clusters must live in centralized facilities with specialized networking hardware and enormous power delivery systems.
+State of the art image and video diffusion models train on thousands of GPUs. They distribute computation then synchronize gradients across them at each optimization step. This incurs a massive networking load, which means that training clusters must live in centralized facilities with specialized networking hardware and enormous power delivery systems.
 
-This is cost-prohibitive. Academic labs can't build specialized clusters with custom networking fabrics. Meanwhile, companies struggle as they hit fundamental limits on power delivery and networking bandwidth when scaling to many thousands of GPUs. In both cases, networking is the critical bottleneck: GPUs need constant, high-bandwidth communication throughout the system. A lighter network load makes it possible to use compute where it’s available, whether in different datacenters or across the internet.
+This is cost-prohibitive. Academic labs can't build specialized clusters with custom networking fabrics. Even large companies struggle as they hit fundamental limits on power delivery and networking bandwidth when scaling to many thousands of GPUs. In both cases, networking is the critical bottleneck: training clusters need constant, high-bandwidth communication throughout the entire system. A segmented network load where independent clusters communicate internally but not among each other makes it possible to use compute where it’s available, whether in different datacenters or across the internet.
 
-<b>Decentralized Diffusion Models</b> (DDMs) tackle this problem. Our method trains a set of expert diffusion models over partitions of the dataset, each in networking isolation from one another. At inference time, they ensemble through a lightweight learned router. We show that this ensemble collectively optimizes the same objective as a single diffusion model trained over the whole dataset. It even outperforms monolithic diffusion models FLOP-for-FLOP, leveraging sparse computation at train and test time. Crucially, DDMs scale gracefully to billions of parameters and produce great results with smaller pretraining budgets.
+<b>Decentralized Diffusion Models</b> (DDMs) tackle this problem. Our method trains a set of expert diffusion models over partitions of the dataset, each in networking isolation from one another. At inference time, they ensemble through a lightweight learned router. We show that this ensemble collectively optimizes the same objective as a single diffusion model trained over the whole dataset. It even outperforms monolithic diffusion models FLOP-for-FLOP, leveraging sparse computation at train and test time. Crucially, DDMs scale gracefully to billions of parameters and produce great results with reduced pretraining budgets.
 <br> <br>
 
 <div class="fake-img l-page" style="margin-bottom: 0;">
   <img src="{{ '/assets/img/decentralized_diffusion/teaser_images.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
 </div>
 <div class="caption" style="margin-top: 5px;">
-    Some samples from our Decentralized Diffusion Model, trained with just eight independent GPU nodes in less than a week.
+    Some samples from our largest Decentralized Diffusion Model, pretrained with just eight independent GPU nodes in less than a week.
 </div>
 
 In this post, we present a simple, geometrically intuitive view on diffusion and flow models from which Decentralized Diffusion Models arrive naturally. We also highlight their strong results and implications for training hardware. DDMs make possible <b>simpler training systems</b> that produce <b>better models</b>.
@@ -100,20 +100,25 @@ Diffusion models and rectified flows can be seen as special cases of flow matchi
   <img src="{{ '/assets/img/decentralized_diffusion/marginal_flow_int.svg' | relative_url }}" alt="DDM Overview" style="width: 80%; height: auto;">
 </div>
 
-The marginal flow, $$u_t$$, represents a vector field at each timestep that transports from $$x_t$$, a noisy latent, to the data distribution ($t=0$). It can be computed analytically over all samples $$x_0$$ in a dataset $$\mathcal{X}$$ or regressed in a model (e.g., a Diffusion Transformer) through flow matching. It takes the form of an expectation over $$x_0$$ data samples. Stated another way, the marginal flow is a linear system that maps from any $$x_t$$ to the data distribution, and we compress this system into a neural network through flow matching.
+<!-- computed analytically over all samples $$x_0$$ in a dataset $$\mathcal{X}$$ -->
+
+The marginal flow, $$u_t$$, represents a vector field at each timestep that transports from $$x_t$$, a noisy variable, to the data distribution ($x_t$ at $t=0$). When we train with flow matching, we regress the marginal flow into a model (e.g., a Diffusion Transformer) that can sample the data distribution. The marginal flow in its analytical form is an expectation over $$x_0$$ data samples. That is, the marginal flow is linear. For any given $$x_t$$, it points toward the data distribution from $$x_t$$. In high dimensions with many data points, this is intractable to compute. Instead, we compress this complex system into a neural network through flow matching.
 
 <div class="l-body" style="text-align: center;">
   <img src="{{ '/assets/img/decentralized_diffusion/marginal_flow_sum.svg' | relative_url }}" alt="DDM Overview" style="width: 80%; height: auto;">
 </div>
 
-Let’s rewrite the marginal flow as a sum over a discrete dataset for clarity. $q(x_0)$ is a constant now. It’s now easy to see that the marginal flow is just a weighted average of the paths from $x_t$ to every data point, $u_t(x_t\|x_0)$. The weights of each path are determined by the normalized probability of drawing $x_t$ from each $x_0$ sample, $p_t(x_t\|x_0)$. Let’s visualize the marginal flow in 2D over a small dataset. 
-<br><br>
+Let’s rewrite the marginal flow as a sum over a discrete dataset for clarity. $q(x_0)$ is a constant now. It’s now easy to see that the marginal flow is just a weighted average of the paths from $x_t$ to each data point, $u_t(x_t\|x_0)$. The weights of each path are determined by the normalized probability of drawing $x_t$ from a Gaussian centered at each $x_0$ sample, $p_t(x_t\|x_0)$. 
 
-In the following live plot:
+Sampling from the marginal flow is simple. At the maximum timestep $t=1$, $$x_t$$ is drawn from the Gaussian distribution. Then, we can transport $$x_t$$ to a sample from the data distribution by integrating the marginal flow backwards in time. This just means taking steps in the direction of the marginal flow at progressively decreasing timesteps. In other words, just keep taking small steps toward a weighted average of the data points and you'll converge to a sample. Machine learning is effective at learning these weighted averages through reconstruction objectives. The meat of this interpretation is not new---it's highly related to score matching, SDEs and Tweedie's formula. These connections are covered much more thoroughly in this <a href="https://diffusionflow.github.io">blog post</a>.
+
+We highlight a new interpretation because it compactly motivates DDMs. Our interpretation is maybe the simplest way to understand the main ideas of this family of models. It also shows that these models can be geometrically intuitive. Since we can compute the marginal flow analytically over small datasets, we can visualize it interactively in 2D. We made the plot below to show how the components of flow-based models interact.
+
+<b>In the following live plot:</b>
 - Data points ($x_0$ samples) are <b style="color: #323083;">dark blue</b>.
 - Each path, $u_t(x_t\|x_0)$, is drawn in <b style="color: #2cc779;">turquoise</b> and its opacity represents its weight.
 - The noisy latent ($x_t$) is <b style="color: #F84643;">red</b>. Drag it around to see how each training example affects the denoising path at different values of $x_t$.
-- The <b style="color: #F84643;">red</b> dotted line shows the denoising path, AKA the marginal flow evaluated at $x_t$.
+- The <b style="color: #F84643;">red</b> dotted line shows the denoising path, AKA the marginal flow evaluated analytically that points from $x_t$ to the weighted average of the data, $\hat{x}_0$.
 - The <b>slider</b> below simulates the denoising (to lower $t$) and the noising (to higher $t$) processes.
 
 <div class="l-page">
@@ -122,7 +127,7 @@ In the following live plot:
 
 <!-- <br style="margin: 6px 0;"> -->
 <br>
-Since the marginal flow is defined at each timestep, the slider updates the timestep t. $x_t$ will be transported accordingly by Euler integrating the marginal flow. The data points will also scale according to a simple linear schedule, $(1-t)*x_0$, the mean of the Gaussians that determine $p_t(x_t\|x_0)$. At low timesteps, the path weights are much peakier and $x_t$ will be drawn to its nearest neighbor. Play around, this simulates a “perfectly overfit” diffusion model. For example, try dragging $x_t$ around the points with the slider set to $t=0.10$.
+Since the marginal flow is defined at each timestep, the slider updates the timestep t. $x_t$ will be transported accordingly by Euler integrating the marginal flow. The data points will also scale according to a simple linear schedule, $(1-t)*x_0$, the mean of the Gaussians that define $p_t(x_t\|x_0)$. At low timesteps, the path weights are much peakier and $x_t$ will be drawn to its nearest neighbor. Play around, this simulates a “perfectly overfit” diffusion model. For example, try dragging $x_t$ around the points with the slider set to $t=0.10$.
 
 This interpretation sets up Decentralized Diffusion Models very naturally. The marginal flow is a linear system, and linear systems are associative. DDMs exploit this associativity to simplify training systems and improve downstream performance.
 
@@ -180,3 +185,14 @@ By selecting only the most relevant expert model per step at test-time, the ense
 </div>
 
 Decentralized Diffusion Models also scale gracefully. We see consistent improvements on evaluations as model size and compute capacity increased. Please see the paper for more detailed analysis of DDMs and how they compare to standard diffusion training.
+
+## Simple Implementation
+
+Going to add a simple code example of how to modify a diffusion training loop to be a DDM in PyTorch.
+
+<d-code block language="python">
+  var x = 25;
+  function(x) {
+    return x * x;
+  }
+</d-code>
