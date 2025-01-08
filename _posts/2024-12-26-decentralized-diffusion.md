@@ -94,6 +94,10 @@ In this post, we present a simple, geometrically intuitive view on diffusion and
 
 ## Simple Intuitions for Diffusion and Flow Models
 
+<div class="l-body">
+  <iframe src="{{ '/assets/plotly/plot_three.html' | relative_url }}" frameborder='0' scrolling='no' height="620px" width="100%" style="border: 1px dashed grey;"></iframe>
+</div>
+
 Diffusion models and rectified flows can be seen as special cases of flow matching<d-cite key="gregor2019draw"></d-cite>, so we use the FM framework to explain DDMs. Most perspectives on diffusion models and flow matching focus on the forward corruption process and the paths it samples for each training example. Let’s instead focus on the training/regression target of these models: the marginal flow. They all minimize the difference between their predictions and the marginal flow.
 
 <div class="l-body" style="text-align: center; margin-top: 0px;">
@@ -151,7 +155,7 @@ We can visualize the component flows of a Decentralized Diffusion Model in the p
 
 Our methods figure below outlines the data preprocessing, training and inference stages of Decentralized Diffusion Models. 
 
-<div class="l-body" style="text-align: center;">
+<div class="l-page" style="text-align: center;">
   <img src="{{ '/assets/img/decentralized_diffusion/method_wide.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
 </div>
 
