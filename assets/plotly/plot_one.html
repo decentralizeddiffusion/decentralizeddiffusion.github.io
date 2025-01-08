@@ -432,7 +432,23 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
 
   var layout = {
     showlegend: false,
-    dragmode: 'pan',
+    dragmode: false,  // Disable all drag interactions
+    hovermode: false,
+    clickmode: 'none',  // Disable click interactions
+    xaxis: {
+      visible: false,
+      range: xAxisRange,
+      autorange: false,
+      fixedrange: true,
+      scaleanchor: 'y'  // Lock aspect ratio
+    },
+    yaxis: {
+      visible: false,
+      range: yAxisRange,
+      autorange: false,
+      fixedrange: true,
+      constrain: 'domain'  // Lock aspect ratio
+    },
     sliders: [{
       pad: {t: 50},
       x: 0.1,
@@ -446,27 +462,19 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       active: Math.floor(t*100),
       steps: steps
     }],
-    xaxis: {
-      visible: false,
-      range: xAxisRange,
-      autorange: false,
-      fixedrange: true
-    },
-    yaxis: {
-      visible: false,
-      range: yAxisRange,
-      autorange: false,
-      fixedrange: true
-    },
     margin: {l:0, r:0, t:0, b:0}
   };
 
   var config = {
-    editable: true,
+    editable: false,  // Changed to false
     scrollZoom: false,
-    displayModeBar: true,
-    dragmode: 'pan',
-    modeBarButtonsToRemove: ['zoomIn2d', 'zoomOut2d', 'autoScale2d', 'select2d', 'lasso2d']
+    displayModeBar: false,  // Hide the entire mode bar
+    dragmode: false,
+    modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+    doubleClick: false,
+    displaylogo: false,
+    responsive: true,
+    staticPlot: true  // This should prevent all interactions except our custom ones
   };
 
   Plotly.newPlot('myDiv', data, layout, config).then(function() {
