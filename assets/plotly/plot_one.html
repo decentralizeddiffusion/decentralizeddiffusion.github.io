@@ -14,7 +14,7 @@
     top: 10px;
     right: 10px;
     padding: 10px 20px;
-    background-color: #FF5733;
+    background-color: #d44c3f;
     color: white;
     border: none;
     border-radius: 5px;
@@ -24,10 +24,26 @@
   #denoiseButton:hover {
     background-color: #E64A2E;
   }
+  #noiseButton {
+    position: absolute;
+    top: 10px;
+    right: 120px;
+    padding: 10px 20px;
+    background-color: #372F80;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  #noiseButton:hover {
+    background-color: #2980B9;
+  }
 </style>
 </head>
 <body>
 <div id="myDiv"></div>
+<button id="noiseButton">Invert</button>
 <button id="denoiseButton">Denoise</button>
 <script>
 var myDiv = document.getElementById('myDiv');
@@ -671,6 +687,68 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
 
   // Add this event listener after the Plotly.newPlot call
   document.getElementById('denoiseButton').addEventListener('click', startDenoising);
+
+  // Add these variables alongside the existing denoise variables
+  var isNoising = false;
+  var noiseStartTime;
+  var noiseStartT;
+  var noiseDuration = 2000; // 2 seconds
+
+  function startNoising() {
+    if (isNoising) return;
+    isNoising = true;
+    noiseStartTime = Date.now();
+    noiseStartT = t;
+    requestAnimationFrame(noiseStep);
+  }
+
+  function noiseStep() {
+    if (!isNoising) return;
+    
+    const elapsed = Date.now() - noiseStartTime;
+    const progress = Math.min(elapsed / noiseDuration, 1);
+    
+    // Smooth easing function
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    // Calculate the new t value (going from current t to 1)
+    const t_new = noiseStartT + (0.99 - noiseStartT) * eased;
+    
+    // Update x_t and y_t using the same logic as the slider
+    if (t !== 0) {
+      var wX = 0, wY = 0;
+      for (var i = 0; i < pts.x0.length; i++) {
+          wX += x0_orig[i] * inf[i];
+          wY += y0_orig[i] * inf[i];
+      }
+      
+      var eps_x = (x_t + (t-1)*(1-t)*wX) / t;
+      var eps_y = (y_t + (t-1)*(1-t)*wY) / t;
+
+      var dt = t_new - t;
+      x_t = x_t + dt*eps_x;
+      y_t = y_t + dt*eps_y;
+    }
+    
+    // Update t
+    t = t_new;
+    
+    // Update the slider position
+    const sliderStep = Math.round(t * 100);
+    myDiv.layout.sliders[0].active = sliderStep;
+    
+    // Update the plot
+    updatePlot(t, x_t, y_t);
+    
+    if (progress < 1) {
+      requestAnimationFrame(noiseStep);
+    } else {
+      isNoising = false;
+    }
+  }
+
+  // Add this event listener alongside the denoiseButton listener
+  document.getElementById('noiseButton').addEventListener('click', startNoising);
 });
 </script>
 </body>

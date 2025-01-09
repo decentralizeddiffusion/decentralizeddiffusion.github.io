@@ -14,7 +14,7 @@
     top: 10px;
     right: 10px;
     padding: 10px 20px;
-    background-color: #FF5733;
+    background-color: #d44c3f;
     color: white;
     border: none;
     border-radius: 5px;
@@ -24,10 +24,26 @@
   #denoiseButton:hover {
     background-color: #E64A2E;
   }
+  #noiseButton {
+    position: absolute;
+    top: 10px;
+    right: 120px;
+    padding: 10px 20px;
+    background-color: #372F80;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  #noiseButton:hover {
+    background-color: #2d5fb3;
+  }
 </style>
 </head>
 <body>
 <div id="myDiv"></div>
+<button id="noiseButton">Invert</button>
 <button id="denoiseButton">Denoise</button>
 <script>
 var myDiv = document.getElementById('myDiv');
@@ -140,52 +156,59 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
 
     // Compute distances (squared)
     for (var i = 0; i < len; i++) {
-      var dx = x_t - mu_t_scale * x0_orig[i];
-      var dy = y_t - mu_t_scale * y0_orig[i];
-      distances[i] = dx * dx + dy * dy;
+        var dx = x_t - mu_t_scale * x0_orig[i];
+        var dy = y_t - mu_t_scale * y0_orig[i];
+        distances[i] = dx * dx + dy * dy;
     }
-
-    // var minDist = Math.min(...distances);
-    // console.log("Minimum distance:", minDist);
 
     var invDenominator = 1 / (2 * sigma_t * sigma_t);
     var scaledDistances = new Array(len);
     var maxVal = -Infinity;
 
     for (var i = 0; i < len; i++) {
-      var val = -distances[i] * invDenominator;
-      scaledDistances[i] = val;
-      if (val > maxVal) {
-        maxVal = val;
-      }
+        var val = -distances[i] * invDenominator;
+        scaledDistances[i] = val;
+        if (val > maxVal) {
+            maxVal = val;
+        }
     }
 
     var expVals = new Array(len);
     var sumExp = 0;
+    var rawSum0 = 0;
+    var rawSum1 = 0;
 
+    // Calculate raw sums during the initial exponential calculation
     for (var i = 0; i < len; i++) {
-      var ev = Math.exp(scaledDistances[i] - maxVal);
-      ev = Math.max(ev, 1e-6);
-      expVals[i] = ev;
-      sumExp += ev;
+        var ev = Math.exp(scaledDistances[i] - maxVal);
+        ev = Math.max(ev, 1e-6);
+        expVals[i] = ev;
+        sumExp += ev;
+        
+        // Add to respective cluster sums
+        if (clusters[i] === 0) {
+            rawSum0 += ev;
+        } else {
+            rawSum1 += ev;
+        }
     }
 
     var baseline = 1e-5;
     for (var i = 0; i < len; i++) {
-      expVals[i] += baseline;
+        expVals[i] += baseline;
     }
 
     sumExp = expVals.reduce((a, b) => a + b, 0);
 
     for (var i = 0; i < len; i++) {
-      expVals[i] /= sumExp;
+        expVals[i] /= sumExp;
     }
 
     // Calculate separate influences for each cluster
     var cluster0_inf = expVals.map((v, i) => clusters[i] === 0 ? v : 0);
     var cluster1_inf = expVals.map((v, i) => clusters[i] === 1 ? v : 0);
 
-    // Renormalize influences within each cluster
+    // Normalize influences within each cluster
     var sum0 = cluster0_inf.reduce((a, b) => a + b, 0);
     var sum1 = cluster1_inf.reduce((a, b) => a + b, 0);
     
@@ -193,10 +216,12 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
     cluster1_inf = cluster1_inf.map(v => v / sum1);
 
     return {
-      influences: expVals, 
-      distances: distances,
-      cluster0_inf: cluster0_inf,
-      cluster1_inf: cluster1_inf
+        influences: expVals, 
+        distances: distances,
+        cluster0_inf: cluster0_inf,
+        cluster1_inf: cluster1_inf,
+        rawSum0: rawSum0,
+        rawSum1: rawSum1
     };
   }
 
@@ -341,6 +366,13 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       w1Y += y0_orig[i] * result.cluster1_inf[i];
     }
 
+    // Use raw Gaussian sums for weights
+    var totalSum = result.rawSum0 + result.rawSum1;
+    var weight0 = result.rawSum0 / totalSum;
+    var weight1 = result.rawSum1 / totalSum;
+
+    // console.log(weight0, weight1);
+
     // Add lines to denoised predictions for each cluster
     var lineToCluster0 = {
       type: 'line',
@@ -348,7 +380,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       x0: x_t, y0: y_t,
       x1: w0X * (1-t), y1: w0Y * (1-t),
       line: {
-        color: '#9F3634',  // Changed from '#ff0000'
+        color: 'rgba(159, 54, 52, ' + weight0 + ')',
         width: 2,
         dash: 'dash'
       }
@@ -360,7 +392,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       x0: x_t, y0: y_t,
       x1: w1X * (1-t), y1: w1Y * (1-t),
       line: {
-        color: '#352F84',  // Changed from '#0000ff'
+        color: 'rgba(53, 47, 132, ' + weight1 + ')',
         width: 2,
         dash: 'dash'
       }
@@ -371,7 +403,10 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
     lineShapes.push(lineToCluster0);
     lineShapes.push(lineToCluster1);
 
-    // Add annotations for denoised predictions
+    // Set opacity threshold for showing annotations
+    const opacityThreshold = 0.1;
+
+    // Add annotations with opacity matching the prediction lines
     var annotations = [{
       x: x_t - 0.03,
       y: y_t + 0.04,
@@ -382,31 +417,43 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       font: {size: 30, color: 'black'},
       align: 'center',
       mode: 'math'
-    },
-    // Annotation for cluster 0's denoised prediction
-    {
-      x: w0X * (1-t) - 0.04,
-      y: w0Y * (1-t) + 0.04,
-      xref: 'x', yref: 'y',
-      text: '$\\hat{x}_0^{(1)}$',
-      bgcolor: 'white',
-      showarrow: false,
-      font: {size: 30, color: '#9F3634'},  // Changed from '#ff0000'
-      align: 'center',
-      mode: 'math'
-    },
-    // Annotation for cluster 1's denoised prediction
-    {
-      x: w1X * (1-t) - 0.04,
-      y: w1Y * (1-t) + 0.04,
-      xref: 'x', yref: 'y',
-      text: '$\\hat{x}_0^{(2)}$',
-      bgcolor: 'white',
-      showarrow: false,
-      font: {size: 30, color: '#352F84'},  // Changed from '#0000ff'
-      align: 'center',
-      mode: 'math'
     }];
+
+    // Only add annotation for cluster 0 if weight is above threshold
+    if (weight0 > opacityThreshold) {
+      annotations.push({
+        x: w0X * (1-t) - 0.04,
+        y: w0Y * (1-t) + 0.04,
+        xref: 'x', yref: 'y',
+        text: '$\\hat{x}_0^{(1)}$',
+        bgcolor: 'white',
+        showarrow: false,
+        font: {
+          size: 30, 
+          color: 'rgba(159, 54, 52, ' + weight0 + ')'
+        },
+        align: 'center',
+        mode: 'math'
+      });
+    }
+
+    // Only add annotation for cluster 1 if weight is above threshold
+    if (weight1 > opacityThreshold) {
+      annotations.push({
+        x: w1X * (1-t) - 0.04,
+        y: w1Y * (1-t) + 0.04,
+        xref: 'x', yref: 'y',
+        text: '$\\hat{x}_0^{(2)}$',
+        bgcolor: 'white',
+        showarrow: false,
+        font: {
+          size: 30, 
+          color: 'rgba(53, 47, 132, ' + weight1 + ')'
+        },
+        align: 'center',
+        mode: 'math'
+      });
+    }
 
     Plotly.react('myDiv', [
       // First trace: cluster 0 points
@@ -436,7 +483,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
         mode: 'markers',
         marker: {
           size: 10,
-          color: '#9F3634',  // Changed from '#ff0000'
+          color: 'rgba(159, 54, 52, ' + weight0 + ')',
           symbol: 'circle-open',
           line: {width: 2}
         }
@@ -448,7 +495,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
         mode: 'markers',
         marker: {
           size: 10,
-          color: '#352F84',  // Changed from '#0000ff'
+          color: 'rgba(53, 47, 132, ' + weight1 + ')',
           symbol: 'circle-open',
           line: {width: 2}
         }
@@ -744,6 +791,69 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
 
   // Add this event listener after the Plotly.newPlot call
   document.getElementById('denoiseButton').addEventListener('click', startDenoising);
+
+  // Add these variables alongside the existing denoising variables
+  var isNoising = false;
+  var noiseStartTime;
+  var noiseStartT;
+  var noiseDuration = 2000; // 2 seconds
+
+  // Add this function alongside startDenoising
+  function startNoising() {
+    if (isNoising) return;
+    isNoising = true;
+    noiseStartTime = Date.now();
+    noiseStartT = t;
+    requestAnimationFrame(noiseStep);
+  }
+
+  function noiseStep() {
+    if (!isNoising) return;
+    
+    const elapsed = Date.now() - noiseStartTime;
+    const progress = Math.min(elapsed / noiseDuration, 1);
+    
+    // Smooth easing function
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    // Calculate the new t value (going from current t to 1)
+    const t_new = noiseStartT + (0.99 - noiseStartT) * eased;
+    
+    // Update x_t and y_t using the same logic as the slider
+    if (t !== 0) {
+        var wX = 0, wY = 0;
+        for (var i = 0; i < pts.x0.length; i++) {
+            wX += x0_orig[i] * inf[i];
+            wY += y0_orig[i] * inf[i];
+        }
+        
+        var eps_x = (x_t + (t-1)*(1-t)*wX) / t;
+        var eps_y = (y_t + (t-1)*(1-t)*wY) / t;
+
+        var dt = t_new - t;
+        x_t = x_t + dt*eps_x;
+        y_t = y_t + dt*eps_y;
+    }
+    
+    // Update t
+    t = t_new;
+    
+    // Update the slider position
+    const sliderStep = Math.round(t * 100);
+    myDiv.layout.sliders[0].active = sliderStep;
+    
+    // Update the plot
+    updatePlot(t, x_t, y_t);
+    
+    if (progress < 1) {
+        requestAnimationFrame(noiseStep);
+    } else {
+        isNoising = false;
+    }
+  }
+
+  // Add this event listener alongside the denoiseButton listener
+  document.getElementById('noiseButton').addEventListener('click', startNoising);
 
 });
 </script>

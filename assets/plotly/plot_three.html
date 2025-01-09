@@ -205,7 +205,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
   var phaseOffsets = []; // Random offset for each point
 
   // Add this constant near the top with other variables
-  const MAX_DISTANCE_FROM_ORIGIN = 1.7; // Adjust this value as needed
+  const MAX_DISTANCE_FROM_ORIGIN = 1.4; // Adjust this value as needed
 
   // Add these variables near the top with other state variables
   const noiseOffsets = Array(numPoints).fill(0).map(() => ({
@@ -288,7 +288,7 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       scaled_x0 *= (1 - t);
       scaled_y0 *= (1 - t);
 
-      const dt = 0.01;
+      const dt = 0.0035;
       let new_x, new_y;
 
       if (phase < 0.5) {
