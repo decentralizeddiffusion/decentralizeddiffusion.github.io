@@ -236,7 +236,7 @@ Decentralized Diffusion Models integrate seamlessly into existing diffusion trai
 To highlight this, we've included a simple code example of how to modify a diffusion training loop to be a DDM in PyTorch.
 
 <d-code block language="python">
-  # Inside a standard diffusion training loop
+  # Inside a standard diffusion training loop:
 
   x = next(dataset)
   t = torch.randint(0, T, (1,))
@@ -251,12 +251,12 @@ To highlight this, we've included a simple code example of how to modify a diffu
 
 </d-code>
 
-To make this a DDM, we first cluster the dataset using a representation model. We used DINOv2 and <a href="https://github.com/facebookresearch/MetaCLIP/tree/main/mode">this codebase</a> to run k-means clustering on a large dataset. We then train a diffusion model over each cluster. This is completely unchanged from standard diffusion training like above.
+To make this a DDM, we first cluster the dataset using a representation model. We used DINOv2<d-cite key="oquab2024dinov2learningrobustvisual"></d-cite> and <a href="https://github.com/facebookresearch/MetaCLIP/tree/main/mode">this codebase</a><d-cite key="ma2024modeclipdataexperts"></d-cite> to run k-means clustering on a large dataset. We then train a diffusion model over each cluster. This is completely unchanged from standard diffusion training like above.
 
 The last step is to train a router that predicts the weights of each expert model at test-time. This reduces to a classification objective over the data clusters.
 
 <d-code block language="python">
-  # Inside a DDM router training loop
+  # Inside a DDM router training loop:
 
   x, cluster_idx = next(dataset)
   t = torch.randint(0, T, (1,))
@@ -273,10 +273,7 @@ The last step is to train a router that predicts the weights of each expert mode
 At test-time, we can sample from the entire distribution by ensembling the experts.
 
 <d-code block language="python">
-  # Inside a naive DDM inference loop
-
-  x_t = torch.randn_like(x)
-  t = T
+  # Inside a naive DDM inference loop:
 
   router_pred = router(x_t, t) # shape (B, num_clusters)
   router_pred = F.softmax(router_pred, dim=1)
@@ -287,7 +284,7 @@ At test-time, we can sample from the entire distribution by ensembling the exper
     model_pred = models[i](x_t, t)
     ensemble_pred += router_pred[:, i] * model_pred
 
-  x_0_pred = reverse_diffuse(x_t, t, noise, ensemble_pred)
+  x_t = reverse_step(x_t, t, ensemble_pred)
 </d-code>
 
 We can make this more efficient by inferencing experts in parallel and by using a sparse router that only activates a subset of the experts at test-time. In our comparisons, we actually just select the single most relevant expert model per step at test-time.
