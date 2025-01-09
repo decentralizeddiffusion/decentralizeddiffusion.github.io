@@ -46,7 +46,7 @@ bibliography: 2018-12-22-distill.bib
 #   - we may want to automate TOC generation in the future using
 #     jekyll-toc plugin (https://github.com/toshimaru/jekyll-toc).
 toc:
-  - name: Motivation
+#   - name: Motivation
   - name: Simple Intuitions for Diffusion and Flow Models
     # if a section has subsections, you can add them as follows:
     # subsections:
@@ -74,27 +74,34 @@ _styles: >
   }
 ---
 
-## Motivation
-
-State of the art image and video diffusion models train on thousands of GPUs. They distribute computation then synchronize gradients across them at each optimization step. This incurs a massive networking load, which means that training clusters must live in centralized facilities with specialized networking hardware and enormous power delivery systems.
-
-This is cost-prohibitive. Academic labs can't build specialized clusters with custom networking fabrics. Even large companies struggle as they hit fundamental limits on power delivery and networking bandwidth when scaling to many thousands of GPUs. In both cases, networking is the critical bottleneck: training clusters need constant, high-bandwidth communication throughout the entire system. A segmented network load where independent clusters communicate internally but not among each other makes it possible to use compute where it’s available, whether in different datacenters or across the internet.
-
-<b>Decentralized Diffusion Models</b> (DDMs) tackle this problem. Our new method trains a series of expert diffusion models, each in communication isolation from one another. This means we can train them in different locations and on different hardware. At inference time, they ensemble through a lightweight learned router. We show that this ensemble collectively optimizes the same objective as a single diffusion model trained over the whole dataset (a monolithic model). It even outperforms monolithic diffusion models FLOP-for-FLOP, leveraging sparse computation at train and test time. Crucially, DDMs scale gracefully to billions of parameters and produce great results with reduced pretraining budgets. See some results below from a model pretrained with just eight independent GPU nodes in less than a week.
-<br> <br>
-
-<div class="fake-img l-page" style="margin-bottom: 0;">
+<div class="fake-img l-body" style="margin-bottom: 0;">
   <img src="{{ '/assets/img/decentralized_diffusion/teaser_images.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
 </div>
 <div class="caption" style="margin-top: 5px;">
     Some samples from our largest Decentralized Diffusion Model, pretrained with just eight independent GPU nodes in less than a week.
 </div>
 
+<!-- ## Motivation -->
+
+State of the art image and video diffusion models train on thousands of GPUs. They distribute computation then synchronize gradients across them at each optimization step. This incurs a massive networking load, which means that training clusters must live in centralized facilities with specialized networking hardware and enormous power delivery systems.
+
+This is cost-prohibitive. Academic labs can't build specialized clusters with custom networking fabrics. Even large companies struggle as they hit fundamental limits on power delivery and networking bandwidth when scaling to many thousands of GPUs. In both cases, networking is the critical bottleneck: training clusters need constant, high-bandwidth communication throughout the entire system. A segmented network load where independent clusters communicate internally but not among each other makes it possible to use compute where it’s available, whether in different datacenters or across the internet.
+
+<b>Decentralized Diffusion Models</b> (DDMs) tackle this problem. Our new method trains a series of expert diffusion models, each in communication isolation from one another. This means we can train them in different locations and on different hardware. At inference time, they ensemble through a lightweight learned router. We show that this ensemble collectively optimizes the same objective as a single diffusion model trained over the whole dataset (a monolithic model). It even outperforms monolithic diffusion models FLOP-for-FLOP, leveraging sparse computation at train and test time. Crucially, DDMs scale gracefully to billions of parameters and produce great results with reduced pretraining budgets. See some results below from a model pretrained with just eight independent GPU nodes in less than a week.
+<!-- <br> <br> -->
+
+<!-- <div class="fake-img l-page" style="margin-bottom: 0;">
+  <img src="{{ '/assets/img/decentralized_diffusion/teaser_images.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
+</div>
+<div class="caption l-page" style="margin-top: 5px;">
+    Some samples from our largest Decentralized Diffusion Model, pretrained with just eight independent GPU nodes in less than a week.
+</div> -->
+
 In this post, we present a simple, geometrically intuitive view on diffusion and flow models from which Decentralized Diffusion Models arrive naturally. We also highlight their compromise-free performance and implications for training hardware. DDMs make possible <b>simpler training systems</b> that produce <b>better models</b>.
 
 ## Simple Intuitions for Diffusion and Flow Models
 
-<div class="l-page">
+<div class="l-body">
   <iframe src="{{ '/assets/plotly/plot_three.html' | relative_url }}" frameborder='0' scrolling='no' height="620px" width="100%" style="border: 1px dashed grey;"></iframe>
 </div>
 
@@ -137,13 +144,15 @@ This interpretation sets up Decentralized Diffusion Models very naturally. <b>Th
 
 ## Decentralized Diffusion Models
 
+Decentralized Diffusion Models leverage the associative property of the marginal flow to split training into many independent sub-training jobs focused on producing "flow experts" that each model a subset of the data. These have no data dependencies to each other, so they can be trained wherever compute is available.
+
 We partition the data into K disjoint clusters  $\{S_1, S_2, \ldots, S_K\}$, and each expert trains on an assigned subset $(x_0 \in S_i)$. Since the marginal flow is a linear combination over data points, we can apply the associative property within each of these data clusters. We therefore rewrite the global marginal flow as a weighted combination of marginal flows over each data partition.
 
 <div class="l-body" style="text-align: center;">
   <img src="{{ '/assets/img/decentralized_diffusion/marginal_flow_associated.svg' | relative_url }}" alt="DDM Overview" style="width: 80%; height: auto;">
 </div>
 
-We train a separate model over each individual data cluster. This is standard flow matching training, so we can reuse popular architectures, hyperparameters and codebases. By adaptively averaging each model’s prediction at test-time, we sample from the entire distribution and optimize the global flow matching objective. We must learn a router to predict the adaptive weights of each expert model at test-time, which ends up being trained with a classification objective over the data clusters. We discuss this more thoroughly in the paper.
+We train a separate diffusion model over each individual data cluster. This is standard flow matching training, so we can reuse popular architectures, hyperparameters and codebases. By adaptively averaging each model’s prediction at test-time, we sample from the entire distribution and optimize the global flow matching objective. We must learn a router to predict the adaptive weights of each expert model at test-time, which ends up being trained with a classification objective over the data clusters. We discuss this more thoroughly in the paper.
 
 We can visualize the component flows of a Decentralized Diffusion Model in the plot below. By ensembling them at test-time, we recover the global marginal flow. Drag the black $x_t$ circle to see the denoising predictions for each expert model (blue and red). Slide the time slider to see how the ensembled denoising predictions update the particle $x_t$.
 
@@ -157,6 +166,10 @@ Our methods figure below outlines the data preprocessing, training and inference
 
 <div class="l-page" style="text-align: center;">
   <img src="{{ '/assets/img/decentralized_diffusion/method_wide.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
+</div>
+
+<div class="caption l-page">
+    DDMs follow a three-step training process. We first cluster the dataset using an off-the-shelf representation model (DINOv2). We train a diffusion model over each of these clusters and a router that associates any input xt with its most likely clusters. At test-time, given a noisy sample, each expert (in red and green) predict their own flows, which combine linearly via the weights predicted by the router. The combined flow samples the entire distribution and is illustrated on the right.
 </div>
 
 ## Why DDMs?
