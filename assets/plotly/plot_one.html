@@ -9,10 +9,26 @@
 <style>
   body { margin: 0; padding: 0; user-select: none; }
   #myDiv { width:100%; height:600px; }
+  #denoiseButton {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 10px 20px;
+    background-color: #FF5733;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  #denoiseButton:hover {
+    background-color: #E64A2E;
+  }
 </style>
 </head>
 <body>
 <div id="myDiv"></div>
+<button id="denoiseButton">Denoise</button>
 <script>
 var myDiv = document.getElementById('myDiv');
 var isUpdating = false; 
@@ -593,6 +609,68 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
     }
   });
 
+  // Add these variables near the top of your script
+  var isDenoising = false;
+  var denoiseStartTime;
+  var denoiseStartT;
+  var denoiseDuration = 2000; // 2 seconds
+
+  // Add this function before the updatePlot function
+  function startDenoising() {
+    if (isDenoising) return;
+    isDenoising = true;
+    denoiseStartTime = Date.now();
+    denoiseStartT = t;
+    requestAnimationFrame(denoiseStep);
+  }
+
+  function denoiseStep() {
+    if (!isDenoising) return;
+    
+    const elapsed = Date.now() - denoiseStartTime;
+    const progress = Math.min(elapsed / denoiseDuration, 1);
+    
+    // Smooth easing function
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    // Calculate the new t value
+    const t_new = denoiseStartT * (1 - eased);
+    
+    // Update x_t and y_t using the same logic as the slider
+    if (t !== 0) {
+      var wX = 0, wY = 0;
+      for (var i = 0; i < pts.x0.length; i++) {
+          wX += x0_orig[i] * inf[i];
+          wY += y0_orig[i] * inf[i];
+      }
+      
+      var eps_x = (x_t + (t-1)*(1-t)*wX) / t;
+      var eps_y = (y_t + (t-1)*(1-t)*wY) / t;
+
+      var dt = t_new - t;
+      x_t = x_t + dt*eps_x;
+      y_t = y_t + dt*eps_y;
+    }
+    
+    // Update t
+    t = t_new;
+    
+    // Update the slider position
+    const sliderStep = Math.round(t * 100);
+    myDiv.layout.sliders[0].active = sliderStep;
+    
+    // Update the plot
+    updatePlot(t, x_t, y_t);
+    
+    if (progress < 1) {
+      requestAnimationFrame(denoiseStep);
+    } else {
+      isDenoising = false;
+    }
+  }
+
+  // Add this event listener after the Plotly.newPlot call
+  document.getElementById('denoiseButton').addEventListener('click', startDenoising);
 });
 </script>
 </body>
