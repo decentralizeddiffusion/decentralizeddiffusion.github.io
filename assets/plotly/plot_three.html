@@ -205,7 +205,14 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
   var phaseOffsets = []; // Random offset for each point
 
   // Add this constant near the top with other variables
-  const MAX_DISTANCE_FROM_ORIGIN = 2.0; // Adjust this value as needed
+  const MAX_DISTANCE_FROM_ORIGIN = 1.7; // Adjust this value as needed
+
+  // Add these variables near the top with other state variables
+  const noiseOffsets = Array(numPoints).fill(0).map(() => ({
+    x: Math.random() * 10000,
+    y: Math.random() * 10000,
+    speed: 0.001 + Math.random() * 0.002
+  }));
 
   function initializeMultiplePoints() {
     x_t_points = [];
@@ -237,6 +244,20 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
     const currentTime = Date.now();
     
     for (let i = 0; i < numPoints; i++) {
+      // Update noise offsets
+      noiseOffsets[i].x += noiseOffsets[i].speed;
+      noiseOffsets[i].y += noiseOffsets[i].speed;
+      
+      // Generate smooth noise using sine waves with different frequencies
+      const noise_x = 0.2 * (
+        Math.sin(noiseOffsets[i].x) + 
+        Math.sin(noiseOffsets[i].x * 0.5) * 0.5
+      );
+      const noise_y = 0.2 * (
+        Math.sin(noiseOffsets[i].y) + 
+        Math.sin(noiseOffsets[i].y * 0.5) * 0.5
+      );
+
       // Calculate phase for this point (0 to 1)
       const adjustedTime = (currentTime - startTime + phaseOffsets[i]) % cycleLength;
       const phase = adjustedTime / cycleLength;
@@ -244,10 +265,8 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
       // Target t value based on phase (0.1 -> 0.7)
       let targetT;
       if (phase < 0.5) {
-        // Noising phase (0.1 -> 0.7)
         targetT = 0.1 + (phase * 2) * 0.6;
       } else {
-        // Denoising phase (0.7 -> 0.1)
         targetT = 0.7 - ((phase - 0.5) * 2) * 0.6;
       }
       
@@ -274,12 +293,12 @@ Plotly.d3.csv('./three_spirals_combined_15_rows_clean.csv', function(err, rows) 
 
       if (phase < 0.5) {
         // Forward diffusion: move away from scaled x_0
-        new_x = x_t_points[i] - (scaled_x0 - x_t_points[i]) * dt;
-        new_y = y_t_points[i] - (scaled_y0 - y_t_points[i]) * dt;
+        new_x = x_t_points[i] - (scaled_x0 - x_t_points[i]) * dt + noise_x * dt;
+        new_y = y_t_points[i] - (scaled_y0 - y_t_points[i]) * dt + noise_y * dt;
       } else {
         // Reverse diffusion: move towards scaled x_0
-        new_x = x_t_points[i] + (scaled_x0 - x_t_points[i]) * dt;
-        new_y = y_t_points[i] + (scaled_y0 - y_t_points[i]) * dt;
+        new_x = x_t_points[i] + (scaled_x0 - x_t_points[i]) * dt + noise_x * dt;
+        new_y = y_t_points[i] + (scaled_y0 - y_t_points[i]) * dt + noise_y * dt;
       }
       
       // Check distance from origin

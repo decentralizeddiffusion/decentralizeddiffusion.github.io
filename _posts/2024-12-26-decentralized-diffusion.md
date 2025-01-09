@@ -94,7 +94,7 @@ In this post, we present a simple, geometrically intuitive view on diffusion and
 
 ## Simple Intuitions for Diffusion and Flow Models
 
-<div class="l-body">
+<div class="l-page">
   <iframe src="{{ '/assets/plotly/plot_three.html' | relative_url }}" frameborder='0' scrolling='no' height="620px" width="100%" style="border: 1px dashed grey;"></iframe>
 </div>
 
