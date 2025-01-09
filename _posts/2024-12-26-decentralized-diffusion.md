@@ -213,8 +213,8 @@ What’s the performance hit from this added convenience? There is none. In fact
   <img src="{{ '/assets/img/decentralized_diffusion/combined_fid_plots.png' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto; clip-path: inset(0px 0 0 0);">
 </div>
 
-<div class="caption l-page">
-    FLOP-for-FLOP, decentralized diffusion models outperform monolith diffusion models on both ImageNet and LAION Aesthetics.
+<div class="caption l-body">
+    <b>Comparing DDMs and standard monolithic diffusion models.</b> FLOP-for-FLOP, decentralized diffusion models outperform monolith diffusion models on both ImageNet and LAION Aesthetics.
 </div>
 
 By selecting only the most relevant expert model per step at test-time, the ensemble instantiates a sparse model. We can view this as activating only a subset of the parameters of a much larger model, resulting in better performance at the same computational cost. This is also the driving insight in Mixture-of-Experts. We use the same architectures, datasets and training hyperparameters between monoliths and DDMs in all our evaluations, and we account for the additional cost of training the router (~4%). Serving a sparse model can be inconvenient with less sophisticated infrastructure, so we also demonstrate that we can efficiently distill DDMs into monolith models in the paper. 
