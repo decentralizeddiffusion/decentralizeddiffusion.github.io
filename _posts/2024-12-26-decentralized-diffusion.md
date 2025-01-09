@@ -4,9 +4,13 @@ title: Decentralized Diffusion Models
 description: Train diffusion models across many GPU clusters without networking bottlenecks.
 tags: distill formatting
 giscus_comments: false
-date: 2024-12-25
+date: 2025-01-09
 permalink: /
 featured: true
+
+# Add this line to set a custom accent color
+theme_color: "#2698BA"   # You can use any hex color code here
+
 mermaid:
   enabled: true
   zoomable: true
@@ -73,6 +77,15 @@ _styles: >
     font-size: 16px;
   }
 ---
+
+<div style="text-align: center; margin-bottom: 20px;">
+  <a href="assets/pdf/paper.pdf" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
+    <i class="fas fa-file-pdf"></i> Paper
+  </a>
+  <a href="https://arxiv.org/abs/XXXX.XXXXX" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
+    <i class="ai ai-arxiv"></i> arXiv
+  </a>
+</div>
 
 <div class="fake-img l-body" style="margin-bottom: 0;">
   <img src="{{ '/assets/img/decentralized_diffusion/teaser_images.jpg' | relative_url }}" alt="DDM Overview" style="width: 100%; height: auto;">
