@@ -186,7 +186,7 @@ The figure below outlines the data preprocessing, training and inference stages 
 </div>
 
 <div class="caption l-page">
-    <b>Decentralized Diffusion Models follow a three-step training process.</b> We first cluster the dataset using an off-the-shelf representation model (DINOv2). We train a diffusion model over each of these clusters and a router that associates any input xt with its most likely clusters. At test-time, given a noisy sample, each expert (in red and green) predict their own flows, which combine linearly via the weights predicted by the router. The combined flow samples the entire distribution and is illustrated on the right.
+    <b>Decentralized Diffusion Models follow a three-step training process.</b> We first cluster the dataset using an off-the-shelf representation model (DINOv2). We train a diffusion model over each of these clusters and a router that associates any input $x_t$ with its most likely clusters. At test-time, given a noisy sample, each expert (in red and green) predict their own flows, which combine linearly via the weights predicted by the router. The combined flow samples the entire distribution and is illustrated on the right.
 </div>
 
 ## Why DDMs?
@@ -235,8 +235,7 @@ Decentralized Diffusion Models integrate seamlessly into existing diffusion trai
 
 To highlight this, we've included a simple code example of how to modify a diffusion training loop to be a DDM in PyTorch.
 
-<!-- <d-code block language="python"> -->
-{% highlight python %}
+<d-code block language="python">
 # Inside a standard diffusion training loop:
 x = next(dataset)
 t = torch.randint(0, T, (1,))
@@ -248,9 +247,7 @@ x_0_pred = reverse_diffuse(x_t, t, noise, pred)
 loss = F.mse_loss(x_0_pred, x)
 loss.backward()
 optimizer.step()
-{% endhighlight %}
-
-<!-- </d-code> -->
+</d-code>
 
 To make this a DDM, we first cluster the dataset using a representation model. We used DINOv2<d-cite key="oquab2024dinov2learningrobustvisual"></d-cite> and <a href="https://github.com/facebookresearch/MetaCLIP/tree/main/mode">this codebase</a><d-cite key="ma2024modeclipdataexperts"></d-cite> to run k-means clustering on a large dataset. We then train a diffusion model over each cluster. This is completely unchanged from standard diffusion training like above.
 
@@ -270,36 +267,34 @@ The last step is to train a router that predicts the weights of each expert mode
 
 </d-code> -->
 
-{% highlight python %}
-# Inside a DDM router training loop:
-x, cluster_idx = next(dataset)
-t = torch.randint(0, T, (1,))
-noise = torch.randn_like(x)
-x_t = forward_diffuse(x, t, noise)
+<d-code block language="python">
+    # Inside a DDM router training loop:
+    x, cluster_idx = next(dataset)
+    t = torch.randint(0, T, (1,))
+    noise = torch.randn_like(x)
+    x_t = forward_diffuse(x, t, noise)
 
-pred = router(x_t, t) # shape (B, num_clusters)
-loss = F.cross_entropy(pred, cluster_idx)
-loss.backward()
-optimizer.step()
-{% endhighlight %}
+    pred = router(x_t, t) # shape (B, num_clusters)
+    loss = F.cross_entropy(pred, cluster_idx)
+    loss.backward()
+    optimizer.step()
+</d-code>
 
 At test-time, we can sample from the entire distribution by ensembling the experts.
 
-<!-- <d-code block language="python"> -->
-{% highlight python %}
-# Inside a naive DDM inference loop:
-router_pred = router(x_t, t) # shape (B, num_clusters)
-router_pred = F.softmax(router_pred, dim=1)
+<d-code block language="python">
+    # Inside a naive DDM inference loop:
+    router_pred = router(x_t, t) # shape (B, num_clusters)
+    router_pred = F.softmax(router_pred, dim=1)
 
-ensemble_pred = torch.zeros_like(x_t)
+    ensemble_pred = torch.zeros_like(x_t)
 
-for i in range(num_clusters):
-model_pred = models[i](x_t, t)
-ensemble_pred += router_pred[:, i] * model_pred
+    for i in range(num_clusters):
+    model_pred = models[i](x_t, t)
+    ensemble_pred += router_pred[:, i] * model_pred
 
-x_t = reverse_step(x_t, t, ensemble_pred)
-{% endhighlight %}
-<!-- </d-code> -->
+    x_t = reverse_step(x_t, t, ensemble_pred)
+</d-code>
 
 We can make this more efficient by inferencing experts in parallel and by using a sparse router that only activates a subset of the experts at test-time. In our comparisons, we actually just select the single most relevant expert model per step at test-time.
 
