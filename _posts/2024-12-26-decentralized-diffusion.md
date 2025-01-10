@@ -79,10 +79,10 @@ _styles: >
 ---
 
 <div style="text-align: center; margin-bottom: 20px;">
-  <a href="assets/pdf/paper.pdf" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
+  <a href="https://arxiv.org/pdf/2501.05450" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
     <i class="fas fa-file-pdf"></i> Paper
   </a>
-  <a href="https://arxiv.org/abs/XXXX.XXXXX" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
+  <a href="https://arxiv.org/abs/2501.05450" class="btn btn-lg z-depth-0" role="button" style="text-decoration: none; border: 1px solid #ccc; margin: 0 5px; padding: 10px 20px;">
     <i class="ai ai-arxiv"></i> arXiv
   </a>
 </div>
