@@ -79,7 +79,9 @@
 
   <body class="{% if site.navbar_fixed %}fixed-top-nav{% endif %} {% unless site.footer_fixed %}sticky-bottom-footer{% endunless %}">
     <!-- Header -->
-    {% include header.liquid %}
+    {% unless page.permalink != '/' and page.layout == 'distill' %}
+      {% include header.liquid %}
+    {% endunless %}
 
     <!-- Content -->
     <div class="post distill">
