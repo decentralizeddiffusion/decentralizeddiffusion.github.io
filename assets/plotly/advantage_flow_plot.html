@@ -751,15 +751,15 @@
 
                 // Draw weight indicator (horizontal line from control point)
                 // Scale relative to the maximum weight to use full range
-                const weightLength = (mode.weight / maxWeight) * weightScale;
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(pos.x, pos.y);
-                ctx.lineTo(pos.x - weightLength, pos.y);
-                ctx.stroke();
-                ctx.setLineDash([]);
+                // const weightLength = (mode.weight / maxWeight) * weightScale;
+                // ctx.strokeStyle = 'white';
+                // ctx.lineWidth = 3;
+                // ctx.setLineDash([5, 5]);
+                // ctx.beginPath();
+                // ctx.moveTo(pos.x, pos.y);
+                // ctx.lineTo(pos.x - weightLength, pos.y);
+                // ctx.stroke();
+                // ctx.setLineDash([]);
                 
                 // Draw control point
                 ctx.fillStyle = '#18327E';
@@ -895,7 +895,7 @@
             };
             
             const dataTrace = {
-                x: dataY.map(y => 1 + scale * y / dataMax),
+                x: dataY.map(y => 1.01 + scale * y / dataMax),
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -906,10 +906,11 @@
                 marker: {
                     color: dataY,
                     colorscale: 'Portland',
+                    // color: '#CE4932',
                     size: 0
                 },
                 fill: 'tozerox',
-                fillcolor: '#18327E',
+                fillcolor: 'white',
                 name: 'Data p_0(x)',
                 xaxis: 'x3',
                 yaxis: 'y3',
@@ -969,9 +970,9 @@
                 },
                 annotations: [
                     {
-                        text: 'Prior',
-                        x: 0.83,
-                        y: 1.05,
+                        text: '',
+                        x: 0.82,
+                        y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
                         showarrow: false,
@@ -979,8 +980,8 @@
                     },
                     {
                         text: 'Advantage',
-                        x: 0.95,
-                        y: 1.05,
+                        x: 0.996,
+                        y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
                         showarrow: false,
@@ -988,8 +989,7 @@
                     }
                 ],
                 showlegend: false,
-                // margin: {t: 20},
-                margin: {t: 20, l: 40, r: 40, b: 40},
+                margin: {t: 60, l: 40, r: 40, b: 40},
             };
             
             const config = {
