@@ -538,7 +538,9 @@
             const layout = plotDiv._fullLayout;
             const xaxis = layout.xaxis;
             const yaxis = layout.yaxis;
-            const xaxis3 = layout.xaxis3; // Data distribution x-axis
+            const xaxis2 = layout.xaxis2; // Prior distribution x-axis
+            const yaxis2 = layout.yaxis2; // Prior distribution y-axis
+            const xaxis3 = layout.xaxis3; // Data distribution x-axis  
             const yaxis3 = layout.yaxis3; // Data distribution y-axis
             
             // Main plot coordinate mapping
@@ -553,7 +555,7 @@
                 plotHeight: yaxis._length
             };
             
-            // Data distribution plot coordinate mapping
+            // Data distribution plot coordinate mapping (now xaxis3/yaxis3)
             if (xaxis3 && yaxis3) {
                 dataDistCoordinateMapping = {
                     xMin: xaxis3.range[0],
@@ -621,15 +623,15 @@
         // Get control point position for a mode - FIXED to use data distribution plot
         function getControlPointPosition(mode) {
             // Calculate the position on the data distribution curve
-            // We need to find where the peak of this Gaussian appears on the right plot
+            // Data trace is now on the rightmost position
             const scale = 0.15; // This matches the scale factor used in plotting
             const dataMax = Math.max(...xGridExtended.map(x => dataPDF(x, currentDataType)));
             
-            // The x position on the data plot is at the peak of the Gaussian
+            // The x position on the data plot (rightmost)
             const peakHeight = mode.weight * gaussianPDF(mode.mean, mode.mean, mode.std);
-            const xPos = 1 + scale * peakHeight / dataMax;
+            const xPos = 1 + scale * peakHeight / dataMax; // Back to original positioning for rightmost data trace
             
-            // Use the data distribution coordinate mapping
+            // Use the data distribution coordinate mapping (xaxis3/yaxis3)
             return dataDistToPixel(xPos, mode.mean);
         }
         
@@ -871,7 +873,7 @@
             const scale = 0.15; // Scale factor for side distributions
             
             const priorTrace = {
-                x: priorY.map(y => -scale * 0.9 * y / priorMax),
+                x: priorY.map(y => scale * 0.9 * y / priorMax),
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -880,9 +882,9 @@
                     dash: 'dash'
                 },
                 marker: {
-                    color: priorY, // Use y-values to drive colorscale
+                    color: priorY,
                     colorscale: 'Portland',
-                    size: 0 // Hide markers, just use for colorscale
+                    size: 0
                 },
                 fill: 'tozerox',
                 fillcolor: '#18327E',
@@ -902,12 +904,11 @@
                     dash: 'dash'
                 },
                 marker: {
-                    color: dataY, // Use y-values to drive colorscale
+                    color: dataY,
                     colorscale: 'Portland',
-                    size: 0 // Hide markers, just use for colorscale
+                    size: 0
                 },
                 fill: 'tozerox',
-                // fillcolor: 'rgba(68, 1, 84, 0.3)', // Viridis purple with transparency
                 fillcolor: '#18327E',
                 name: 'Data p_0(x)',
                 xaxis: 'x3',
@@ -928,7 +929,7 @@
                         text: 'Timestep (t)',
                         font: {weight: 'bold'}
                     },
-                    domain: [0.2, 0.8],
+                    domain: [0.2, 0.75],
                     range: [0, 1],
                     zeroline: false,
                 },
@@ -939,11 +940,11 @@
                     zeroline: false,
                 },
                 xaxis2: {
-                    domain: [0, 0.15],
+                    domain: [0.78, 0.88],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [-scale, 0]
+                    range: [0, scale]
                 },
                 yaxis2: {
                     anchor: 'x2',
@@ -953,7 +954,7 @@
                     range: [xMinExtended, xMaxExtended]
                 },
                 xaxis3: {
-                    domain: [0.85, 1],
+                    domain: [0.9, 1],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
@@ -969,7 +970,7 @@
                 annotations: [
                     {
                         text: 'Prior',
-                        x: 0.075,
+                        x: 0.83,
                         y: 1.05,
                         xref: 'paper',
                         yref: 'paper',
@@ -977,8 +978,8 @@
                         font: {size: 20, color: '#18327E', weight: 'bold'}
                     },
                     {
-                        text: 'Data',
-                        x: 0.925,
+                        text: 'Advantage',
+                        x: 0.95,
                         y: 1.05,
                         xref: 'paper',
                         yref: 'paper',
