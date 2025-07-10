@@ -682,6 +682,45 @@
             return centroids;
         }
         
+        // Match old modes to new modes by proximity to minimize crossing
+        function matchModesByProximity(oldModes, newModes) {
+            if (oldModes.length === 0 || newModes.length === 0) {
+                return { oldToNew: [], newToOld: [] };
+            }
+            
+            // For each old mode, find the closest new mode
+            const oldToNew = new Array(oldModes.length).fill(-1);
+            const newToOld = new Array(newModes.length).fill(-1);
+            const used = new Array(newModes.length).fill(false);
+            
+            // Sort old modes by their mean for stable matching
+            const sortedOldIndices = oldModes.map((_, i) => i).sort((a, b) => oldModes[a].mean - oldModes[b].mean);
+            
+            // Match each old mode to the closest available new mode
+            for (let oldIdx of sortedOldIndices) {
+                let bestNewIdx = -1;
+                let bestDistance = Infinity;
+                
+                for (let newIdx = 0; newIdx < newModes.length; newIdx++) {
+                    if (used[newIdx]) continue;
+                    
+                    const distance = Math.abs(oldModes[oldIdx].mean - newModes[newIdx].mean);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestNewIdx = newIdx;
+                    }
+                }
+                
+                if (bestNewIdx !== -1) {
+                    oldToNew[oldIdx] = bestNewIdx;
+                    newToOld[bestNewIdx] = oldIdx;
+                    used[bestNewIdx] = true;
+                }
+            }
+            
+            return { oldToNew, newToOld };
+        }
+        
         // Animate transition between distributions
         function animateDistributionTransition() {
             if (currentStage !== 2 || !stageData.targetModes) return;
@@ -705,36 +744,46 @@
                 return;
             }
             
-            // Interpolate between old and new distributions
-            const oldModes = getDataModes(currentDataType);
+            // Get the original modes at the start of transition
+            if (!stageData.originalModes) {
+                stageData.originalModes = [...getDataModes(currentDataType)];
+            }
+            
+            const oldModes = stageData.originalModes;
             const newModes = stageData.targetModes;
             const t = stageData.transitionProgress;
             
-            // Simple linear interpolation for now
-            // In a more sophisticated version, we could use optimal transport
+            // Match modes by proximity to avoid crossing
+            const { oldToNew, newToOld } = matchModesByProximity(oldModes, newModes);
+            
             const interpolatedModes = [];
             
-            // Match modes by proximity and interpolate
-            const maxModes = Math.max(oldModes.length, newModes.length);
-            for (let i = 0; i < maxModes; i++) {
-                if (i < oldModes.length && i < newModes.length) {
-                    // Both modes exist, interpolate
+            // Handle matched pairs
+            for (let oldIdx = 0; oldIdx < oldModes.length; oldIdx++) {
+                const newIdx = oldToNew[oldIdx];
+                if (newIdx !== -1) {
+                    // Interpolate between matched modes
                     interpolatedModes.push({
-                        mean: oldModes[i].mean * (1 - t) + newModes[i].mean * t,
-                        std: oldModes[i].std * (1 - t) + newModes[i].std * t,
-                        weight: oldModes[i].weight * (1 - t) + newModes[i].weight * t
-                    });
-                } else if (i < oldModes.length) {
-                    // Old mode fading out
-                    interpolatedModes.push({
-                        ...oldModes[i],
-                        weight: oldModes[i].weight * (1 - t)
+                        mean: oldModes[oldIdx].mean * (1 - t) + newModes[newIdx].mean * t,
+                        std: oldModes[oldIdx].std * (1 - t) + newModes[newIdx].std * t,
+                        weight: oldModes[oldIdx].weight * (1 - t) + newModes[newIdx].weight * t
                     });
                 } else {
+                    // Old mode fading out (no match found)
+                    interpolatedModes.push({
+                        ...oldModes[oldIdx],
+                        weight: oldModes[oldIdx].weight * (1 - t)
+                    });
+                }
+            }
+            
+            // Handle unmatched new modes (fading in)
+            for (let newIdx = 0; newIdx < newModes.length; newIdx++) {
+                if (newToOld[newIdx] === -1) {
                     // New mode fading in
                     interpolatedModes.push({
-                        ...newModes[i],
-                        weight: newModes[i].weight * t
+                        ...newModes[newIdx],
+                        weight: newModes[newIdx].weight * t
                     });
                 }
             }
@@ -745,7 +794,10 @@
                 interpolatedModes.forEach(mode => mode.weight /= totalWeight);
             }
             
-            customDataModes[currentDataType] = interpolatedModes;
+            // Filter out modes with very small weights to avoid visual artifacts
+            const filteredModes = interpolatedModes.filter(mode => mode.weight > 0.001);
+            
+            customDataModes[currentDataType] = filteredModes;
             plotFlow();
             
             // Continue animation
