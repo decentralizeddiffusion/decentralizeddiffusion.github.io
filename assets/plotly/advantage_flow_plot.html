@@ -163,13 +163,25 @@
             color: white;
             border: none;
             border-radius: 8px;
-            cursor: not-allowed;
+            cursor: pointer;
             opacity: 0.6;
-            transition: opacity 0.3s ease;
+            transition: all 0.3s ease;
         }
         
-        .top-buttons button:hover {
+        .top-buttons button:hover:not(:disabled) {
             opacity: 0.8;
+            transform: translateY(-2px);
+        }
+        
+        .top-buttons button.active {
+            opacity: 1;
+            background-color: #f48a3f;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .top-buttons button:disabled {
+            cursor: not-allowed;
+            opacity: 0.4;
         }
         
         /* Responsive design for top buttons */
@@ -201,9 +213,9 @@
 </head>
 <body>
     <div class="top-buttons">
-        <button disabled>Sample Actions</button>
-        <button disabled>Scale by Advantage</button>
-        <button disabled>Redirect the Flow</button>
+        <button id="sampleBtn" onclick="handleStageButton(0)">Sample Actions</button>
+        <button id="advantageBtn" onclick="handleStageButton(1)" disabled>Scale by Advantage</button>
+        <button id="redirectBtn" onclick="handleStageButton(2)" disabled>Redirect the Flow</button>
     </div>
     <div class="heatmap-wrapper">
         <div id="visualization-container">
@@ -216,22 +228,8 @@
         <button onclick="changeDataDistribution('trimodal')">Trimodal Data</button>
         <button class="animation-button" onclick="addMoreParticles(20)">More Particles</button>
     </div> -->
-    <div class="sliders-wrapper">
-        <div class="slider-container side-by-side">
-            <label for="stochasticitySlider">
-                Stochasticity: <span class="slider-value" id="stochasticityValue">0.0</span>
-            </label>
-            <input type="range" id="stochasticitySlider" class="slider" min="0" max="1.0" step="0.04" value="0.0">
-        </div>
-        <div class="slider-container side-by-side">
-            <label for="particleRateSlider">
-                Particle Count: <span class="slider-value" id="particleRateValue">0.2</span>
-            </label>
-            <input type="range" id="particleRateSlider" class="slider" min="0" max="1.0" step="0.05" value="0.2">
-        </div>
-    </div>
-    <div class="info-text">
-        Drag the control points on the right to adjust the data mixture (position and weighting of components). Control stochasticity and particle rate with the sliders above.
+    <div class="info-text" id="infoText">
+        Click "Sample Actions" to begin. Particles will flow from left to right, sampling from the current distribution.
     </div>
 
     <script>
@@ -245,7 +243,7 @@
         let currentDataType = 'bimodal';
         
         // Stochasticity scale factor
-        let stochasticityScale = 0.0;
+        let stochasticityScale = 0.2;
         
         // Particle addition rate (0 = no particles, 1 = particles every frame)
         let particleRate = 0.2;
@@ -265,6 +263,7 @@
         // Coordinate mapping cache
         let coordinateMapping = null;
         let dataDistCoordinateMapping = null; // Separate mapping for data distribution plot
+        let advantageCoordinateMapping = null; // For advantage plot (rightmost trace)
         
         // Customizable data modes - these will be modified by dragging
         let customDataModes = {
@@ -277,6 +276,26 @@
                 {mean: 0, std: 0.3, weight: 0.34},
                 {mean: 1, std: 0.3, weight: 0.33}
             ]
+        };
+        
+        // Customizable advantage modes - now only 2 modes
+        let advantageModes = [
+            {mean: -0.5, std: 0.4, weight: 0.45},
+            {mean: 0.6, std: 0.3, weight: 0.55}
+        ];
+        
+        // Number of centroids for k-means clustering
+        const numCentroids = 3;
+        
+        // Stage management
+        let currentStage = -1; // -1: initial, 0: sample, 1: advantage, 2: redirect
+        let stageData = {
+            particleEndPositions: [],
+            centroids: [],
+            scaledCentroids: [],
+            targetModes: null,
+            transitionProgress: 0,
+            samplingActive: false
         };
         
         // Dragging state
@@ -313,9 +332,16 @@
                 this.fading = false;
                 this.opacity = 1.0;
                 this.fadeDuration = 0.5; // Time in seconds to fade out
+                this.hasReachedEnd = false;
+                this.isAccumulated = false; // New flag for accumulated particles
             }
             
             update(dt, dataType) {
+                // Handle accumulated particles (never fade)
+                if (this.isAccumulated) {
+                    return true; // Keep particle alive forever
+                }
+                
                 if (this.fading) {
                     // Particle is fading out
                     this.opacity -= dt / this.fadeDuration;
@@ -323,7 +349,22 @@
                 }
                 
                 if (this.t >= 1) {
-                    // Particle reached end, start fading
+                    // Particle reached end
+                    if (!this.hasReachedEnd) {
+                        this.hasReachedEnd = true;
+                        // Record end position for stage 1
+                        if (currentStage === 0) {
+                            stageData.particleEndPositions.push(this.x);
+                            this.isAccumulated = true; // Mark as accumulated
+                        }
+                    }
+                    
+                    // In stage 0, keep particle visible at end
+                    if (currentStage === 0) {
+                        return true;
+                    }
+                    
+                    // Otherwise start fading
                     this.fading = true;
                     this.opacity = 1.0;
                     return true; // Keep particle for fading
@@ -400,6 +441,15 @@
         // Prior distribution (standard Gaussian)
         function priorPDF(x) {
             return gaussianPDF(x, 0, 0.6);
+        }
+        
+        // Advantage function - now uses customizable advantage modes
+        function advantageFunction(x) {
+            let pdf = 0;
+            for (let mode of advantageModes) {
+                pdf += mode.weight * gaussianPDF(x, mode.mean, mode.std);
+            }
+            return pdf;
         }
         
         // Get modes (peaks) of the data distribution
@@ -526,6 +576,313 @@
             return {drift: drift, diffusion: diffusionCoef};
         }
         
+        // K-means clustering implementation
+        function kMeansClustering(positions, k) {
+            if (positions.length === 0) return [];
+            
+            // Initialize centroids randomly from data points
+            let centroids = [];
+            const shuffled = [...positions].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < Math.min(k, positions.length); i++) {
+                centroids.push({
+                    mean: shuffled[i],
+                    points: [],
+                    count: 0
+                });
+            }
+            
+            // K-means iterations
+            const maxIterations = 50;
+            for (let iter = 0; iter < maxIterations; iter++) {
+                // Clear assignments
+                centroids.forEach(c => {
+                    c.points = [];
+                    c.count = 0;
+                });
+                
+                // Assign points to nearest centroid
+                positions.forEach(pos => {
+                    let minDist = Infinity;
+                    let nearestCentroid = 0;
+                    
+                    for (let i = 0; i < centroids.length; i++) {
+                        const dist = Math.abs(pos - centroids[i].mean);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            nearestCentroid = i;
+                        }
+                    }
+                    
+                    centroids[nearestCentroid].points.push(pos);
+                    centroids[nearestCentroid].count++;
+                });
+                
+                // Update centroid positions
+                let converged = true;
+                centroids.forEach(centroid => {
+                    if (centroid.count > 0) {
+                        const newMean = centroid.points.reduce((sum, p) => sum + p, 0) / centroid.count;
+                        if (Math.abs(newMean - centroid.mean) > 0.001) {
+                            converged = false;
+                        }
+                        centroid.mean = newMean;
+                    }
+                });
+                
+                if (converged) break;
+            }
+            
+            // Calculate statistics for each centroid
+            return centroids.filter(c => c.count > 0).map(centroid => {
+                // Calculate standard deviation
+                const variance = centroid.points.reduce((sum, p) => 
+                    sum + Math.pow(p - centroid.mean, 2), 0) / centroid.count;
+                const std = Math.max(0.15, Math.sqrt(variance)); // Minimum std
+                
+                return {
+                    mean: centroid.mean,
+                    std: std,
+                    count: centroid.count,
+                    weight: centroid.count // Will be normalized later
+                };
+            });
+        }
+        
+        // Apply advantage scaling to centroids
+        function applyAdvantageScaling(centroids) {
+            // First normalize centroid weights
+            const totalCount = centroids.reduce((sum, c) => sum + c.count, 0);
+            centroids.forEach(c => {
+                c.weight = c.count / totalCount;
+            });
+            
+            // Then scale by advantage
+            return centroids.map(centroid => {
+                const advantage = advantageFunction(centroid.mean);
+                return {
+                    ...centroid,
+                    advantage: advantage,
+                    scaledWeight: centroid.weight * advantage
+                };
+            });
+        }
+        
+        // Normalize advantage-scaled centroids
+        function normalizeAdvantageCentroids(centroids) {
+            const totalWeight = centroids.reduce((sum, c) => sum + c.scaledWeight, 0);
+            if (totalWeight > 0) {
+                return centroids.map(centroid => ({
+                    mean: centroid.mean,
+                    std: centroid.std,
+                    weight: centroid.scaledWeight / totalWeight,
+                    advantage: centroid.advantage,
+                    count: centroid.count
+                }));
+            }
+            return centroids;
+        }
+        
+        // Animate transition between distributions
+        function animateDistributionTransition() {
+            if (currentStage !== 2 || !stageData.targetModes) return;
+            
+            const transitionSpeed = 0.02; // Adjust for faster/slower transitions
+            stageData.transitionProgress += transitionSpeed;
+            
+            if (stageData.transitionProgress >= 1) {
+                // Transition complete
+                stageData.transitionProgress = 1;
+                customDataModes[currentDataType] = [...stageData.targetModes];
+                plotFlow();
+                
+                // Auto-restart the cycle after a brief pause
+                setTimeout(() => {
+                    updateInfoText("Transition complete! Restarting cycle...");
+                    setTimeout(() => {
+                        startStage0(); // Auto-restart the cycle
+                    }, 3000);
+                }, 1000);
+                return;
+            }
+            
+            // Interpolate between old and new distributions
+            const oldModes = getDataModes(currentDataType);
+            const newModes = stageData.targetModes;
+            const t = stageData.transitionProgress;
+            
+            // Simple linear interpolation for now
+            // In a more sophisticated version, we could use optimal transport
+            const interpolatedModes = [];
+            
+            // Match modes by proximity and interpolate
+            const maxModes = Math.max(oldModes.length, newModes.length);
+            for (let i = 0; i < maxModes; i++) {
+                if (i < oldModes.length && i < newModes.length) {
+                    // Both modes exist, interpolate
+                    interpolatedModes.push({
+                        mean: oldModes[i].mean * (1 - t) + newModes[i].mean * t,
+                        std: oldModes[i].std * (1 - t) + newModes[i].std * t,
+                        weight: oldModes[i].weight * (1 - t) + newModes[i].weight * t
+                    });
+                } else if (i < oldModes.length) {
+                    // Old mode fading out
+                    interpolatedModes.push({
+                        ...oldModes[i],
+                        weight: oldModes[i].weight * (1 - t)
+                    });
+                } else {
+                    // New mode fading in
+                    interpolatedModes.push({
+                        ...newModes[i],
+                        weight: newModes[i].weight * t
+                    });
+                }
+            }
+            
+            // Normalize weights
+            const totalWeight = interpolatedModes.reduce((sum, mode) => sum + mode.weight, 0);
+            if (totalWeight > 0) {
+                interpolatedModes.forEach(mode => mode.weight /= totalWeight);
+            }
+            
+            customDataModes[currentDataType] = interpolatedModes;
+            plotFlow();
+            
+            // Continue animation
+            requestAnimationFrame(animateDistributionTransition);
+        }
+        
+        // Handle stage button clicks
+        function handleStageButton(stage) {
+            if (stage === currentStage) return; // Already in this stage
+            
+            switch(stage) {
+                case 0: // Sample Actions
+                    startStage0();
+                    break;
+                case 1: // Scale by Advantage
+                    if (currentStage === 0) {
+                        startStage1();
+                    }
+                    break;
+                case 2: // Redirect the Flow
+                    if (currentStage === 1) {
+                        startStage2();
+                    }
+                    break;
+            }
+        }
+        
+        // Start Stage 0: Sample Actions
+        function startStage0() {
+            currentStage = 0;
+            updateButtonStates();
+            
+            // Reset stage data
+            stageData = {
+                particleEndPositions: [],
+                centroids: [],
+                scaledCentroids: [],
+                targetModes: null,
+                transitionProgress: 0,
+                samplingActive: true
+            };
+            
+            // Clear all particles and start fresh
+            particles = [];
+            
+            // Temporarily increase particle rate for sampling
+            const oldParticleRate = particleRate;
+            particleRate = 0.8; // High rate for sampling phase
+            
+            // Start animation if not running
+            if (!animationId) {
+                startAnimation();
+            }
+            
+            updateInfoText("Sampling actions... Particles are flowing through the current distribution.");
+            
+            // After a longer duration, stop adding new particles
+            setTimeout(() => {
+                particleRate = 0; // Stop adding particles
+                stageData.samplingActive = false;
+                updateInfoText("Sampling in progress... Particles are accumulating at the end.");
+                
+                // Wait longer for particles to reach the end, then auto-progress to stage 1
+                setTimeout(() => {
+                    if (currentStage === 0) {
+                        updateInfoText("Sampling complete! Auto-progressing to advantage scaling...");
+                        setTimeout(() => {
+                            startStage1(); // Auto-progress to stage 1
+                        }, 1000);
+                    }
+                }, 6000); // Increased from 3000 to 6000 (6 seconds)
+            }, 2000); // Increased from 2000 to 4000 (4 seconds)
+        }
+        
+        // Start Stage 1: Scale by Advantage
+        function startStage1() {
+            currentStage = 1;
+            updateButtonStates();
+            
+            // Fit k centroids to the particle end positions
+            stageData.centroids = kMeansClustering(stageData.particleEndPositions, numCentroids);
+            
+            // Apply advantage scaling to centroids
+            stageData.scaledCentroids = applyAdvantageScaling(stageData.centroids);
+            
+            // Update plot to show scaled distribution
+            plotFlow();
+            
+            updateInfoText(`Fitted ${stageData.centroids.length} centroids and scaled by advantage! The data distribution now shows the advantage-weighted centroids.`);
+            
+            // Auto-progress to stage 2
+            setTimeout(() => {
+                updateInfoText("Auto-progressing to flow redirection...");
+                setTimeout(() => {
+                    startStage2(); // Auto-progress to stage 2
+                }, 1000);
+            }, 2000);
+        }
+        
+        // Start Stage 2: Redirect the Flow
+        function startStage2() {
+            currentStage = 2;
+            updateButtonStates();
+            
+            // Normalize and set target modes
+            stageData.targetModes = normalizeAdvantageCentroids(stageData.scaledCentroids);
+            stageData.transitionProgress = 0;
+            
+            // Clear particles for a clean transition
+            particles = [];
+            
+            updateInfoText("Redirecting the flow... Watch as the distribution smoothly transitions.");
+            
+            // Start the transition animation
+            animateDistributionTransition();
+        }
+        
+        // Update button states based on current stage
+        function updateButtonStates() {
+            const buttons = ['sampleBtn', 'advantageBtn', 'redirectBtn'];
+            buttons.forEach((btnId, index) => {
+                const btn = document.getElementById(btnId);
+                if (index === currentStage) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+                // Disable all buttons since we're in autoplay mode
+                btn.disabled = true;
+            });
+        }
+        
+        // Update info text
+        function updateInfoText(text) {
+            document.getElementById('infoText').textContent = text;
+        }
+        
         // Create density matrix for heatmap
         function createDensityMatrix(type) {
             const z = [];
@@ -575,16 +932,17 @@
             if (!plotDiv || !plotDiv._fullLayout) {
                 coordinateMapping = null;
                 dataDistCoordinateMapping = null;
+                advantageCoordinateMapping = null;
                 return;
             }
             
             const layout = plotDiv._fullLayout;
             const xaxis = layout.xaxis;
             const yaxis = layout.yaxis;
-            const xaxis2 = layout.xaxis2; // Prior distribution x-axis
-            const yaxis2 = layout.yaxis2; // Prior distribution y-axis
-            const xaxis3 = layout.xaxis3; // Data distribution x-axis  
-            const yaxis3 = layout.yaxis3; // Data distribution y-axis
+            const xaxis2 = layout.xaxis2; // Data distribution x-axis
+            const yaxis2 = layout.yaxis2; // Data distribution y-axis
+            const xaxis3 = layout.xaxis3; // Advantage x-axis  
+            const yaxis3 = layout.yaxis3; // Advantage y-axis
             
             // Main plot coordinate mapping
             coordinateMapping = {
@@ -598,9 +956,23 @@
                 plotHeight: yaxis._length
             };
             
-            // Data distribution plot coordinate mapping (now xaxis3/yaxis3)
-            if (xaxis3 && yaxis3) {
+            // Data distribution plot coordinate mapping
+            if (xaxis2 && yaxis2) {
                 dataDistCoordinateMapping = {
+                    xMin: xaxis2.range[0],
+                    xMax: xaxis2.range[1],
+                    yMin: yaxis2.range[0],
+                    yMax: yaxis2.range[1],
+                    plotLeft: xaxis2._offset,
+                    plotTop: yaxis2._offset,
+                    plotWidth: xaxis2._length,
+                    plotHeight: yaxis2._length
+                };
+            }
+            
+            // Advantage plot coordinate mapping (now the rightmost)
+            if (xaxis3 && yaxis3) {
+                advantageCoordinateMapping = {
                     xMin: xaxis3.range[0],
                     xMax: xaxis3.range[1],
                     yMin: yaxis3.range[0],
@@ -631,19 +1003,19 @@
             return {x: pixelX, y: pixelY};
         }
         
-        // Convert data distribution coordinates to pixel coordinates
-        function dataDistToPixel(xDist, yDist) {
-            if (!dataDistCoordinateMapping) return {x: 0, y: 0};
+        // Convert advantage coordinates to pixel coordinates
+        function advantageToPixel(xDist, yDist) {
+            if (!advantageCoordinateMapping) return {x: 0, y: 0};
             
-            const pixelX = dataDistCoordinateMapping.plotLeft + 
-                          (xDist - dataDistCoordinateMapping.xMin) / 
-                          (dataDistCoordinateMapping.xMax - dataDistCoordinateMapping.xMin) * 
-                          dataDistCoordinateMapping.plotWidth;
+            const pixelX = advantageCoordinateMapping.plotLeft + 
+                          (xDist - advantageCoordinateMapping.xMin) / 
+                          (advantageCoordinateMapping.xMax - advantageCoordinateMapping.xMin) * 
+                          advantageCoordinateMapping.plotWidth;
             
-            const pixelY = dataDistCoordinateMapping.plotTop + dataDistCoordinateMapping.plotHeight -
-                          ((yDist - dataDistCoordinateMapping.yMin) / 
-                          (dataDistCoordinateMapping.yMax - dataDistCoordinateMapping.yMin) * 
-                          dataDistCoordinateMapping.plotHeight);
+            const pixelY = advantageCoordinateMapping.plotTop + advantageCoordinateMapping.plotHeight -
+                          ((yDist - advantageCoordinateMapping.yMin) / 
+                          (advantageCoordinateMapping.yMax - advantageCoordinateMapping.yMin) * 
+                          advantageCoordinateMapping.plotHeight);
             
             return {x: pixelX, y: pixelY};
         }
@@ -663,26 +1035,25 @@
             return {t: t, x: x};
         }
         
-        // Get control point position for a mode - FIXED to use data distribution plot
-        function getControlPointPosition(mode) {
-            // Calculate the position on the data distribution curve
-            // Data trace is now on the rightmost position
+        // Get control point position for an advantage mode
+        function getControlPointPosition(mode, index) {
+            // Calculate the position on the advantage curve
             const scale = 0.15; // This matches the scale factor used in plotting
-            const dataMax = Math.max(...xGridExtended.map(x => dataPDF(x, currentDataType)));
+            const advantageMax = Math.max(...xGridExtended.map(x => advantageFunction(x)));
             
-            // The x position on the data plot (rightmost)
+            // The x position on the advantage plot (rightmost)
             const peakHeight = mode.weight * gaussianPDF(mode.mean, mode.mean, mode.std);
-            const xPos = 1 + scale * peakHeight / dataMax; // Back to original positioning for rightmost data trace
+            const xPos = 0.9 + scale * peakHeight / advantageMax;
             
-            // Use the data distribution coordinate mapping (xaxis3/yaxis3)
-            return dataDistToPixel(xPos, mode.mean);
+            // Use the advantage coordinate mapping
+            return advantageToPixel(xPos, mode.mean);
         }
         
         // Check if mouse is over a control point
         function getControlPointAtPosition(mouseX, mouseY) {
-            const modes = getDataModes(currentDataType);
-            for (let i = 0; i < modes.length; i++) {
-                const pos = getControlPointPosition(modes[i]);
+            for (let i = 0; i < advantageModes.length; i++) {
+                const pos = getControlPointPosition(advantageModes[i], i);
+                if (!pos) continue;
                 const dist = Math.sqrt(Math.pow(mouseX - pos.x, 2) + Math.pow(mouseY - pos.y, 2));
                 if (dist <= controlPointHoverRadius) {
                     return i;
@@ -703,8 +1074,8 @@
                 draggedModeIndex = modeIndex;
                 dragStartX = mouseX;
                 dragStartY = mouseY;
-                dragStartWeight = customDataModes[currentDataType][modeIndex].weight;
-                dragStartMean = customDataModes[currentDataType][modeIndex].mean;
+                dragStartWeight = advantageModes[modeIndex].weight;
+                dragStartMean = advantageModes[modeIndex].mean;
                 canvas.classList.add('dragging');
                 e.preventDefault();
             }
@@ -716,29 +1087,25 @@
             const mouseY = e.clientY - rect.top;
             
             if (isDragging && draggedModeIndex >= 0) {
-                const modes = customDataModes[currentDataType];
-                
                 // Update mean based on vertical movement
                 const deltaY = mouseY - dragStartY;
                 const meanChange = -deltaY * 0.005; // Scale factor for mean changes
-                modes[draggedModeIndex].mean = Math.max(xMin + 0.2, Math.min(xMax - 0.2, dragStartMean + meanChange));
+                advantageModes[draggedModeIndex].mean = Math.max(xMin + 0.2, Math.min(xMax - 0.2, dragStartMean + meanChange));
                 
                 // Update weight based on horizontal movement
                 const deltaX = mouseX - dragStartX;
                 const weightChange = deltaX * 0.005; // Scale factor for weight changes
                 
-                // For weight changes, we use a different strategy:
-                // - Allow weights to go beyond 1.0 temporarily
-                // - Then normalize all weights proportionally
+                // For weight changes, allow temporary denormalization
                 let newWeight = Math.max(0.05, dragStartWeight + weightChange);
-                modes[draggedModeIndex].weight = newWeight;
+                advantageModes[draggedModeIndex].weight = newWeight;
                 
                 // Calculate total weight
-                const totalWeight = modes.reduce((sum, mode) => sum + mode.weight, 0);
+                const totalWeight = advantageModes.reduce((sum, mode) => sum + mode.weight, 0);
                 
                 // Only normalize if total weight is significantly different from 1.0
                 if (Math.abs(totalWeight - 1.0) > 0.01) {
-                    modes.forEach(mode => mode.weight /= totalWeight);
+                    advantageModes.forEach(mode => mode.weight /= totalWeight);
                 }
                 
                 // Update the plot
@@ -757,9 +1124,8 @@
         function handleMouseUp(e) {
             if (isDragging) {
                 // Final normalization to ensure weights sum to exactly 1.0
-                const modes = customDataModes[currentDataType];
-                const totalWeight = modes.reduce((sum, mode) => sum + mode.weight, 0);
-                modes.forEach(mode => mode.weight /= totalWeight);
+                const totalWeight = advantageModes.reduce((sum, mode) => sum + mode.weight, 0);
+                advantageModes.forEach(mode => mode.weight /= totalWeight);
                 
                 isDragging = false;
                 draggedModeIndex = -1;
@@ -772,17 +1138,13 @@
         
         // Render control points
         function renderControlPoints() {
-            if (!ctx || !coordinateMapping || !dataDistCoordinateMapping) return;
+            if (!ctx || !coordinateMapping || !advantageCoordinateMapping) return;
             
-            const modes = getDataModes(currentDataType);
-            
-            // Find the maximum weight for scaling the weight indicators
-            const maxWeight = Math.max(...modes.map(m => m.weight));
-            const weightScale = 60; // Maximum length of weight indicator in pixels
-            
-            // Draw control points
-            modes.forEach((mode, index) => {
-                const pos = getControlPointPosition(mode);
+            // Draw control points for advantage modes
+            advantageModes.forEach((mode, index) => {
+                const pos = getControlPointPosition(mode, index);
+                if (!pos) return;
+                
                 const radius = (index === hoveredModeIndex || index === draggedModeIndex) ? 
                               controlPointHoverRadius : controlPointRadius;
                 
@@ -791,21 +1153,9 @@
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 2;
                 ctx.shadowOffsetY = 2;
-
-                // Draw weight indicator (horizontal line from control point)
-                // Scale relative to the maximum weight to use full range
-                // const weightLength = (mode.weight / maxWeight) * weightScale;
-                // ctx.strokeStyle = 'white';
-                // ctx.lineWidth = 3;
-                // ctx.setLineDash([5, 5]);
-                // ctx.beginPath();
-                // ctx.moveTo(pos.x, pos.y);
-                // ctx.lineTo(pos.x - weightLength, pos.y);
-                // ctx.stroke();
-                // ctx.setLineDash([]);
                 
                 // Draw control point
-                ctx.fillStyle = '#18327E';
+                ctx.fillStyle = '#f48a3f';
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
@@ -821,11 +1171,9 @@
                 
                 // Draw label
                 ctx.fillStyle = '#333';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'left';
-                // ctx.fillText(`μ=${mode.mean.toFixed(2)}`, pos.x + 15, pos.y - 5);
                 ctx.font = 'bold 12px Arial';
-                ctx.fillText(`${mode.weight.toFixed(1)}`, pos.x + 15, pos.y + 4);
+                ctx.textAlign = 'left';
+                ctx.fillText(`${mode.weight.toFixed(2)}`, pos.x + 15, pos.y + 4);
             });
         }
         
@@ -843,8 +1191,8 @@
             particles.forEach(particle => {
                 const pos = dataToPixel(particle.t, particle.x);
                 
-                // Draw trajectory if enabled
-                if (showParticleTraces && particle.trajectory.length > 1 && !particle.fading) {
+                // Draw trajectory if enabled (but not for accumulated particles)
+                if (showParticleTraces && particle.trajectory.length > 1 && !particle.isAccumulated && !particle.fading) {
                     ctx.globalAlpha = particle.opacity * 0.4;
                     ctx.strokeStyle = particle.color;                    
                     ctx.lineWidth = 2;
@@ -900,45 +1248,37 @@
                 y: xGrid,
                 z: densityMatrix,
                 type: 'heatmap',
-                // colorscale: customColorscale,
                 colorscale: "Portland",
                 showscale: false,
                 hoverinfo: 'none',
             };
             
-            // Create prior and data distribution traces
-            const priorY = xGridExtended.map(x => priorPDF(x));
-            const dataY = xGridExtended.map(x => dataPDF(x, currentDataType));
+            // Create data distribution trace (immediate right of heatmap)
+            let dataY;
+            if (currentStage >= 1 && stageData.scaledCentroids.length > 0) {
+                // Show the advantage-scaled centroids
+                dataY = xGridExtended.map(x => {
+                    let pdf = 0;
+                    stageData.scaledCentroids.forEach(centroid => {
+                        pdf += centroid.scaledWeight * gaussianPDF(x, centroid.mean, centroid.std);
+                    });
+                    return pdf;
+                });
+            } else {
+                // Show the regular data distribution
+                dataY = xGridExtended.map(x => dataPDF(x, currentDataType));
+            }
+            
+            // Create advantage trace (rightmost)
+            const advantageY = xGridExtended.map(x => advantageFunction(x));
             
             // Normalize for visualization
-            const priorMax = Math.max(...priorY);
             const dataMax = Math.max(...dataY);
+            const advantageMax = Math.max(...advantageY);
             const scale = 0.15; // Scale factor for side distributions
             
-            const priorTrace = {
-                x: priorY.map(y => scale * 0.9 * y / priorMax),
-                y: xGridExtended,
-                type: 'scatter',
-                mode: 'lines+markers',
-                line: {
-                    width: 3,
-                    dash: 'dash'
-                },
-                marker: {
-                    color: priorY,
-                    colorscale: 'Portland',
-                    size: 0
-                },
-                fill: 'tozerox',
-                fillcolor: '#18327E',
-                name: 'Prior p_T(x)',
-                xaxis: 'x2',
-                yaxis: 'y2',
-                hoverinfo: 'none'
-            };
-            
             const dataTrace = {
-                x: dataY.map(y => 1.01 + scale * y / dataMax),
+                x: dataY.map(y => 0.78 + scale * y / dataMax),
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -949,31 +1289,48 @@
                 marker: {
                     color: dataY,
                     colorscale: 'Portland',
-                    // color: '#CE4932',
                     size: 0
                 },
                 fill: 'tozerox',
-                fillcolor: 'white',
-                name: 'Data p_0(x)',
+                fillcolor: '#18327E',
+                name: 'Data',
+                xaxis: 'x2',
+                yaxis: 'y2',
+                hoverinfo: 'none'
+            };
+            
+            // Advantage trace - rightmost
+            const advantageTrace = {
+                x: advantageY.map(y => 0.9 + scale * y / advantageMax),
+                y: xGridExtended,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: {
+                    width: 3,
+                    dash: 'solid'
+                },
+                marker: {
+                    color: '#f48a3f',
+                    size: 0
+                },
+                fill: 'tozerox',
+                fillcolor: 'rgba(244, 138, 63, 0.3)',
+                name: 'Advantage',
                 xaxis: 'x3',
                 yaxis: 'y3',
                 hoverinfo: 'none'
             };
 
-            const data = [heatmapTrace, priorTrace, dataTrace];
+            const data = [heatmapTrace, dataTrace, advantageTrace];
             
             const layout = {
-                // title: {
-                //     text: 'Flow from Noise to Data Distribution',
-                //     font: {size: 20, family: 'Helvetica Neue', weight: 'bold'}
-                // },
                 hovermode: false,
                 xaxis: {
                     title: {
                         text: 'Timestep (t)',
                         font: {weight: 'bold'}
                     },
-                    domain: [0.2, 0.75],
+                    domain: [0.1, 0.65],
                     range: [0, 1],
                     zeroline: false,
                 },
@@ -984,11 +1341,11 @@
                     zeroline: false,
                 },
                 xaxis2: {
-                    domain: [0.78, 0.88],
+                    domain: [0.68, 0.78],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [0, scale]
+                    range: [0.78, 0.78 + scale]
                 },
                 yaxis2: {
                     anchor: 'x2',
@@ -998,11 +1355,11 @@
                     range: [xMinExtended, xMaxExtended]
                 },
                 xaxis3: {
-                    domain: [0.9, 1],
+                    domain: [0.8, 0.9],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [1, 1 + scale]
+                    range: [0.9, 0.9 + scale]
                 },
                 yaxis3: {
                     anchor: 'x3',
@@ -1013,8 +1370,8 @@
                 },
                 annotations: [
                     {
-                        text: '',
-                        x: 0.82,
+                        text: 'Data',
+                        x: 0.73,
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
@@ -1023,12 +1380,12 @@
                     },
                     {
                         text: 'Advantage',
-                        x: 0.996,
+                        x: 0.85,
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
                         showarrow: false,
-                        font: {size: 20, color: '#18327E', weight: 'bold'}
+                        font: {size: 20, color: '#f48a3f', weight: 'bold'}
                     }
                 ],
                 showlegend: false,
@@ -1047,7 +1404,7 @@
                     // Render particles
                     renderParticles();
                     // Auto-start animation if not already running
-                    if (!animationId && particles.length === 0) {
+                    if (!animationId && particles.length === 0 && currentStage === -1) {
                         resetAnimation();
                     }
                 }, 100);
@@ -1074,7 +1431,8 @@
             // Update all particles
             const dt = deltaTime * animationSpeed;
 
-            if (Math.random() < particleRate) {
+            // Only add particles if sampling is active
+            if (stageData.samplingActive && Math.random() < particleRate) {
                 addMoreParticles(1);
             }
             
@@ -1134,21 +1492,26 @@
             plotFlow();
         }
         
-        // Slider event listeners
-        document.getElementById('stochasticitySlider').addEventListener('input', function(e) {
-            stochasticityScale = parseFloat(e.target.value);
-            document.getElementById('stochasticityValue').textContent = stochasticityScale.toFixed(1);
-        });
+        // Slider event listeners - COMMENTED OUT
+        // document.getElementById('stochasticitySlider').addEventListener('input', function(e) {
+        //     stochasticityScale = parseFloat(e.target.value);
+        //     document.getElementById('stochasticityValue').textContent = stochasticityScale.toFixed(1);
+        // });
         
-        document.getElementById('particleRateSlider').addEventListener('input', function(e) {
-            particleRate = parseFloat(e.target.value);
-            document.getElementById('particleRateValue').textContent = particleRate.toFixed(1);
-        });
+        // document.getElementById('particleRateSlider').addEventListener('input', function(e) {
+        //     particleRate = parseFloat(e.target.value);
+        //     document.getElementById('particleRateValue').textContent = particleRate.toFixed(1);
+        // });
         
         // Initialize canvas and start
         initCanvas();
-        resetAnimation();
         plotFlow();
+        startAnimation();
+        
+        // Auto-start the cycle
+        setTimeout(() => {
+            startStage0(); // Auto-start the first stage
+        }, 1000);
     </script>
 </body>
 </html>
