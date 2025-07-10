@@ -164,7 +164,7 @@
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            opacity: 0.6;
+            opacity: 1.0; /* Changed from 0.6 to 1.0 for normal contrast */
             transition: all 0.3s ease;
         }
         
@@ -175,13 +175,13 @@
         
         .top-buttons button.active {
             opacity: 1;
-            background-color: #f48a3f;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background-color: #C8372C; /* Changed from #f48a3f to #C8372C */
+            /* Removed box-shadow line to eliminate shadows */
         }
         
         .top-buttons button:disabled {
             cursor: not-allowed;
-            opacity: 0.4;
+            opacity: 1.0; /* Changed from 0.4 to 1.0 for normal contrast */
         }
         
         /* Responsive design for top buttons */
@@ -721,26 +721,40 @@
             return { oldToNew, newToOld };
         }
         
+        // Animation state tracking to prevent getting stuck
+        let animationState = {
+            transitionStartTime: null,
+            maxTransitionDuration: 15000, // 15 seconds max
+            lastProgressCheck: null,
+            stuckCheckInterval: null
+        };
+        
         // Animate transition between distributions
         function animateDistributionTransition() {
             if (currentStage !== 2 || !stageData.targetModes) return;
             
-            const transitionSpeed = 0.02; // Adjust for faster/slower transitions
+            // Initialize timing on first call
+            if (!animationState.transitionStartTime) {
+                animationState.transitionStartTime = Date.now();
+                animationState.lastProgressCheck = stageData.transitionProgress;
+                
+                // Set up stuck detection
+                startStuckDetection();
+            }
+            
+            const transitionSpeed = 0.08; // Increased from 0.02 to 0.08 for faster animation
             stageData.transitionProgress += transitionSpeed;
+            
+            // Force completion if taking too long
+            const elapsed = Date.now() - animationState.transitionStartTime;
+            if (elapsed > animationState.maxTransitionDuration) {
+                console.warn('Transition taking too long, forcing completion');
+                stageData.transitionProgress = 1;
+            }
             
             if (stageData.transitionProgress >= 1) {
                 // Transition complete
-                stageData.transitionProgress = 1;
-                customDataModes[currentDataType] = [...stageData.targetModes];
-                plotFlow();
-                
-                // Auto-restart the cycle after a brief pause
-                setTimeout(() => {
-                    updateInfoText("Transition complete! Restarting cycle...");
-                    setTimeout(() => {
-                        startStage0(); // Auto-restart the cycle
-                    }, 3000);
-                }, 1000);
+                completeTransition();
                 return;
             }
             
@@ -802,6 +816,83 @@
             
             // Continue animation
             requestAnimationFrame(animateDistributionTransition);
+        }
+        
+        // Complete the transition and restart cycle
+        function completeTransition() {
+            stageData.transitionProgress = 1;
+            customDataModes[currentDataType] = [...stageData.targetModes];
+            plotFlow();
+            
+            // Clean up animation state
+            resetAnimationState();
+            
+            // Auto-restart the cycle after a brief pause
+            setTimeout(() => {
+                updateInfoText("Transition complete! Restarting cycle...");
+                setTimeout(() => {
+                    startStage0(); // Auto-restart the cycle
+                }, 3000);
+            }, 1000);
+        }
+        
+        // Reset animation state tracking
+        function resetAnimationState() {
+            animationState.transitionStartTime = null;
+            animationState.lastProgressCheck = null;
+            
+            if (animationState.stuckCheckInterval) {
+                clearInterval(animationState.stuckCheckInterval);
+                animationState.stuckCheckInterval = null;
+            }
+        }
+        
+        // Start detection for stuck animations
+        function startStuckDetection() {
+            // Clear any existing interval
+            if (animationState.stuckCheckInterval) {
+                clearInterval(animationState.stuckCheckInterval);
+            }
+            
+            // Check every 2 seconds if animation is making progress
+            animationState.stuckCheckInterval = setInterval(() => {
+                if (currentStage === 2) {
+                    const currentProgress = stageData.transitionProgress;
+                    const timeSinceStart = Date.now() - animationState.transitionStartTime;
+                    
+                    // If no progress for 5 seconds OR total time exceeds limit, force completion
+                    if (currentProgress === animationState.lastProgressCheck && timeSinceStart > 5000) {
+                        console.warn('Animation appears stuck, forcing completion');
+                        completeTransition();
+                    } else if (timeSinceStart > animationState.maxTransitionDuration) {
+                        console.warn('Animation timeout, forcing completion');
+                        completeTransition();
+                    } else {
+                        animationState.lastProgressCheck = currentProgress;
+                    }
+                } else {
+                    // Not in stage 2 anymore, clean up
+                    resetAnimationState();
+                }
+            }, 2000);
+        }
+        
+        // Handle window focus/blur to recover from stuck animations
+        function handleWindowFocus() {
+            // If we're stuck in stage 2 when regaining focus, check if we need to force completion
+            if (currentStage === 2 && stageData.transitionProgress > 0) {
+                const timeSinceStart = animationState.transitionStartTime ? 
+                    Date.now() - animationState.transitionStartTime : 0;
+                
+                // If it's been too long, force completion
+                if (timeSinceStart > animationState.maxTransitionDuration) {
+                    console.warn('Recovered from stuck animation on window focus');
+                    completeTransition();
+                } else {
+                    // Restart the animation
+                    requestAnimationFrame(animateDistributionTransition);
+                }
+            }
         }
         
         // Handle stage button clicks
@@ -902,9 +993,13 @@
             currentStage = 2;
             updateButtonStates();
             
+            // Reset animation state
+            resetAnimationState();
+            
             // Normalize and set target modes
             stageData.targetModes = normalizeAdvantageCentroids(stageData.scaledCentroids);
             stageData.transitionProgress = 0;
+            stageData.originalModes = null; // Reset for new transition
             
             // Clear particles for a clean transition
             particles = [];
@@ -1207,7 +1302,7 @@
                 ctx.shadowOffsetY = 2;
                 
                 // Draw control point
-                ctx.fillStyle = '#f48a3f';
+                ctx.fillStyle = '#C8372C';
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
@@ -1221,11 +1316,11 @@
                 ctx.shadowOffsetX = 0;
                 ctx.shadowOffsetY = 0;
                 
-                // Draw label
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 12px Arial';
-                ctx.textAlign = 'left';
-                ctx.fillText(`${mode.weight.toFixed(2)}`, pos.x + 15, pos.y + 4);
+                // Draw label - COMMENTED OUT to remove number labels
+                // ctx.fillStyle = '#333';
+                // ctx.font = 'bold 12px Arial';
+                // ctx.textAlign = 'left';
+                // ctx.fillText(`${mode.weight.toFixed(2)}`, pos.x + 15, pos.y + 4);
             });
         }
         
@@ -1284,30 +1379,81 @@
             renderControlPoints();
         }
         
-        // Plot function
-        function plotFlow() {
-            const densityMatrix = createDensityMatrix(currentDataType);
+        // Animation state for data trace
+        let dataTraceAnimation = {
+            isAnimating: false,
+            startTime: null,
+            duration: 1000, // 1 second animation
+            startDataY: null,
+            targetDataY: null,
+            currentDataY: null
+        };
+        
+        // Smooth data trace animation function
+        function animateDataTrace(timestamp) {
+            if (!dataTraceAnimation.isAnimating) return;
             
-            // Create custom colorscale that interpolates between red and blue
-            const customColorscale = [
-                [0, '#FFFFFF'],    // White for low values
-                [1, '#4994EC']     // Blue for high values
-            ];
+            if (!dataTraceAnimation.startTime) {
+                dataTraceAnimation.startTime = timestamp;
+            }
             
-            // Create heatmap trace
-            const heatmapTrace = {
-                x: tGrid,
-                y: xGrid,
-                z: densityMatrix,
-                type: 'heatmap',
-                colorscale: "Portland",
-                showscale: false,
-                hoverinfo: 'none',
+            const elapsed = timestamp - dataTraceAnimation.startTime;
+            const progress = Math.min(elapsed / dataTraceAnimation.duration, 1);
+            
+            // Easing function for smooth animation
+            const easeInOutCubic = (t) => {
+                return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
             };
             
-            // Create data distribution trace (immediate right of heatmap)
+            const easedProgress = easeInOutCubic(progress);
+            
+            // Interpolate between start and target data
+            dataTraceAnimation.currentDataY = dataTraceAnimation.startDataY.map((startVal, i) => {
+                const targetVal = dataTraceAnimation.targetDataY[i];
+                return startVal + (targetVal - startVal) * easedProgress;
+            });
+            
+            // Update the plot with interpolated data
+            updatePlotWithCurrentData();
+            
+            if (progress < 1) {
+                // Continue animation
+                requestAnimationFrame(animateDataTrace);
+            } else {
+                // Animation complete
+                dataTraceAnimation.isAnimating = false;
+                dataTraceAnimation.startTime = null;
+                dataTraceAnimation.currentDataY = [...dataTraceAnimation.targetDataY];
+            }
+        }
+        
+        // Start data trace animation
+        function startDataTraceAnimation(newDataY) {
+            // Store current data as starting point
+            if (dataTraceAnimation.currentDataY) {
+                dataTraceAnimation.startDataY = [...dataTraceAnimation.currentDataY];
+            } else {
+                // First time - use the current data distribution
+                dataTraceAnimation.startDataY = xGridExtended.map(x => dataPDF(x, currentDataType));
+            }
+            
+            dataTraceAnimation.targetDataY = [...newDataY];
+            dataTraceAnimation.isAnimating = true;
+            dataTraceAnimation.startTime = null;
+            
+            // Start the animation
+            requestAnimationFrame(animateDataTrace);
+        }
+        
+        // Update plot with current animated data
+        function updatePlotWithCurrentData() {
+            const densityMatrix = createDensityMatrix(currentDataType);
+            
+            // Use animated data if available, otherwise compute current data
             let dataY;
-            if (currentStage >= 1 && stageData.scaledCentroids.length > 0) {
+            if (dataTraceAnimation.currentDataY) {
+                dataY = dataTraceAnimation.currentDataY;
+            } else if (currentStage >= 1 && stageData.scaledCentroids.length > 0) {
                 // Show the advantage-scaled centroids
                 dataY = xGridExtended.map(x => {
                     let pdf = 0;
@@ -1329,8 +1475,19 @@
             const advantageMax = Math.max(...advantageY);
             const scale = 0.15; // Scale factor for side distributions
             
+            // Create heatmap trace
+            const heatmapTrace = {
+                x: tGrid,
+                y: xGrid,
+                z: densityMatrix,
+                type: 'heatmap',
+                colorscale: "Portland",
+                showscale: false,
+                hoverinfo: 'none',
+            };
+            
             const dataTrace = {
-                x: dataY.map(y => 0.655 + scale * y / dataMax), // Changed from 0.78 to 0.655
+                x: dataY.map(y => 0.655 + scale * y / dataMax),
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -1353,7 +1510,7 @@
             
             // Advantage trace - rightmost
             const advantageTrace = {
-                x: advantageY.map(y => 0.82 + scale * y / advantageMax), // Changed from 0.9 to 0.82
+                x: advantageY.map(y => 0.82 + scale * y / advantageMax),
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -1362,12 +1519,12 @@
                     dash: 'solid'
                 },
                 marker: {
-                    color: '#f48a3f',
+                    color: '#C8372C',
                     size: 0
                 },
                 fill: 'tozerox',
-                fillcolor: 'rgba(244, 138, 63, 0.3)',
-                name: 'Advantage',
+                fillcolor: 'rgba(200, 55, 44, 0.1)',
+                name: 'Reward',
                 xaxis: 'x3',
                 yaxis: 'y3',
                 hoverinfo: 'none'
@@ -1393,11 +1550,11 @@
                     zeroline: false,
                 },
                 xaxis2: {
-                    domain: [0.655, 0.77], // Changed from [0.68, 0.78] to move closer to heatmap
+                    domain: [0.655, 0.77],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [0.655, 0.655 + scale] // Updated range to match new domain
+                    range: [0.655, 0.655 + 1.1 * scale]
                 },
                 yaxis2: {
                     anchor: 'x2',
@@ -1407,11 +1564,11 @@
                     range: [xMinExtended, xMaxExtended]
                 },
                 xaxis3: {
-                    domain: [0.82, 0.92], // Changed from [0.8, 0.9] to increase spacing
+                    domain: [0.82, 0.92],
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [0.82, 0.82 + scale] // Updated range to match new domain
+                    range: [0.82, 0.82 + scale]
                 },
                 yaxis3: {
                     anchor: 'x3',
@@ -1422,8 +1579,8 @@
                 },
                 annotations: [
                     {
-                        text: 'Data',
-                        x: 0.72, // Adjusted annotation position for data trace
+                        text: '',
+                        x: 0.71,
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
@@ -1432,12 +1589,12 @@
                     },
                     {
                         text: 'Advantage',
-                        x: 0.87, // Adjusted annotation position for advantage trace
+                        x: 0.87,
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
                         showarrow: false,
-                        font: {size: 20, color: '#f48a3f', weight: 'bold'}
+                        font: {size: 20, color: '#C8372C', weight: 'bold'}
                     }
                 ],
                 showlegend: false,
@@ -1448,19 +1605,45 @@
                 responsive: true
             };
             
-            Plotly.newPlot('plot-container', data, layout, config).then(() => {
-                // Add a small delay to ensure Plotly has finished rendering
-                setTimeout(() => {
-                    // Update canvas size after plot is created
-                    updateCanvasSize();
-                    // Render particles
-                    renderParticles();
-                    // Auto-start animation if not already running
-                    if (!animationId && particles.length === 0 && currentStage === -1) {
-                        resetAnimation();
-                    }
-                }, 100);
+            // Use Plotly.react for faster updates during animation
+            Plotly.react('plot-container', data, layout, config).then(() => {
+                // Update coordinate mapping and render particles
+                updateCanvasSize();
+                renderParticles();
             });
+        }
+        
+        // Modified plot function to trigger animations
+        function plotFlow() {
+            // Calculate what the new data should be
+            let newDataY;
+            if (currentStage >= 1 && stageData.scaledCentroids.length > 0) {
+                // Show the advantage-scaled centroids
+                newDataY = xGridExtended.map(x => {
+                    let pdf = 0;
+                    stageData.scaledCentroids.forEach(centroid => {
+                        pdf += centroid.scaledWeight * gaussianPDF(x, centroid.mean, centroid.std);
+                    });
+                    return pdf;
+                });
+            } else {
+                // Show the regular data distribution
+                newDataY = xGridExtended.map(x => dataPDF(x, currentDataType));
+            }
+            
+            // Check if we need to animate the data trace
+            const shouldAnimate = dataTraceAnimation.currentDataY && 
+                                 !dataTraceAnimation.isAnimating && 
+                                 currentStage >= 1; // Only animate when scaling is applied
+            
+            if (shouldAnimate) {
+                // Start smooth animation to new data
+                startDataTraceAnimation(newDataY);
+            } else {
+                // Update immediately (first load or during distribution transition)
+                dataTraceAnimation.currentDataY = newDataY;
+                updatePlotWithCurrentData();
+            }
         }
         
         // Add window resize handler
@@ -1544,17 +1727,6 @@
             plotFlow();
         }
         
-        // Slider event listeners - COMMENTED OUT
-        // document.getElementById('stochasticitySlider').addEventListener('input', function(e) {
-        //     stochasticityScale = parseFloat(e.target.value);
-        //     document.getElementById('stochasticityValue').textContent = stochasticityScale.toFixed(1);
-        // });
-        
-        // document.getElementById('particleRateSlider').addEventListener('input', function(e) {
-        //     particleRate = parseFloat(e.target.value);
-        //     document.getElementById('particleRateValue').textContent = particleRate.toFixed(1);
-        // });
-        
         // Initialize canvas and start
         initCanvas();
         plotFlow();
@@ -1564,6 +1736,12 @@
         setTimeout(() => {
             startStage0(); // Auto-start the first stage
         }, 1000);
+
+        // Add window event listeners for focus/blur handling
+        window.addEventListener('focus', handleWindowFocus);
+        window.addEventListener('blur', () => {
+            // Window lost focus - the animation might get paused
+        });
     </script>
 </body>
 </html>
