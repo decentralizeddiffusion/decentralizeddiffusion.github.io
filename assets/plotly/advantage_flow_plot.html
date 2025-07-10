@@ -147,6 +147,44 @@
             font-size: 14px;
         }
         
+        /* New CSS for the three buttons */
+        .top-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .top-buttons button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #18327E;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+        
+        .top-buttons button:hover {
+            opacity: 0.8;
+        }
+        
+        /* Responsive design for top buttons */
+        @media (max-width: 768px) {
+            .top-buttons {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .top-buttons button {
+                width: 200px;
+            }
+        }
+        
         /* Responsive design for smaller screens */
         @media (max-width: 768px) {
             .sliders-wrapper {
@@ -162,6 +200,11 @@
     </style>
 </head>
 <body>
+    <div class="top-buttons">
+        <button disabled>Sample Actions</button>
+        <button disabled>Scale by Advantage</button>
+        <button disabled>Redirect the Flow</button>
+    </div>
     <div class="heatmap-wrapper">
         <div id="visualization-container">
             <div id="plot-container"></div>
