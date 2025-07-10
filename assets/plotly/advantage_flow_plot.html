@@ -1095,7 +1095,7 @@
             
             // The x position on the advantage plot (rightmost)
             const peakHeight = mode.weight * gaussianPDF(mode.mean, mode.mean, mode.std);
-            const xPos = 0.9 + scale * peakHeight / advantageMax;
+            const xPos = 0.82 + scale * peakHeight / advantageMax; // Changed from 0.9 to 0.82
             
             // Use the advantage coordinate mapping
             return advantageToPixel(xPos, mode.mean);
@@ -1330,7 +1330,7 @@
             const scale = 0.15; // Scale factor for side distributions
             
             const dataTrace = {
-                x: dataY.map(y => 0.78 + scale * y / dataMax),
+                x: dataY.map(y => 0.655 + scale * y / dataMax), // Changed from 0.78 to 0.655
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -1353,7 +1353,7 @@
             
             // Advantage trace - rightmost
             const advantageTrace = {
-                x: advantageY.map(y => 0.9 + scale * y / advantageMax),
+                x: advantageY.map(y => 0.82 + scale * y / advantageMax), // Changed from 0.9 to 0.82
                 y: xGridExtended,
                 type: 'scatter',
                 mode: 'lines+markers',
@@ -1393,11 +1393,11 @@
                     zeroline: false,
                 },
                 xaxis2: {
-                    domain: [0.68, 0.78],
+                    domain: [0.655, 0.77], // Changed from [0.68, 0.78] to move closer to heatmap
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [0.78, 0.78 + scale]
+                    range: [0.655, 0.655 + scale] // Updated range to match new domain
                 },
                 yaxis2: {
                     anchor: 'x2',
@@ -1407,11 +1407,11 @@
                     range: [xMinExtended, xMaxExtended]
                 },
                 xaxis3: {
-                    domain: [0.8, 0.9],
+                    domain: [0.82, 0.92], // Changed from [0.8, 0.9] to increase spacing
                     showticklabels: false,
                     showgrid: false,
                     zeroline: false,
-                    range: [0.9, 0.9 + scale]
+                    range: [0.82, 0.82 + scale] // Updated range to match new domain
                 },
                 yaxis3: {
                     anchor: 'x3',
@@ -1423,7 +1423,7 @@
                 annotations: [
                     {
                         text: 'Data',
-                        x: 0.73,
+                        x: 0.72, // Adjusted annotation position for data trace
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
@@ -1432,7 +1432,7 @@
                     },
                     {
                         text: 'Advantage',
-                        x: 0.85,
+                        x: 0.87, // Adjusted annotation position for advantage trace
                         y: 1.15,
                         xref: 'paper',
                         yref: 'paper',
