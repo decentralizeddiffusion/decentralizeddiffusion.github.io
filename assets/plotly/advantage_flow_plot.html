@@ -190,7 +190,7 @@
             height: 50px !important;
             border-radius: 8px !important;
             padding: 0 !important;
-            background-color: #666 !important;
+            background-color: #F1A948 !important;
             opacity: 1.0 !important;
             display: flex !important;
             align-items: center !important;
@@ -206,13 +206,6 @@
         
         .reset-button.active {
             background-color: #666 !important;
-        }
-        
-        .reset-icon {
-            font-size: 24px;
-            color: white;
-            font-weight: bold;
-            line-height: 1;
         }
         
         /* Responsive design for reset button */
@@ -274,9 +267,18 @@
         }
 
         .reset-icon {
-            font-size: 24px;
-            font-weight: bold;
+            width: 20px;
+            height: 20px;
             color: white;
+            transition: transform 0.2s ease;
+        }
+        
+        .reset-button:hover .reset-icon {
+            transform: rotate(-15deg);
+        }
+        
+        .reset-button:active .reset-icon {
+            transform: rotate(-30deg);
         }
     </style>
 </head>
@@ -286,7 +288,12 @@
         <button id="advantageBtn" onclick="handleStageButton(1)" disabled>Scale by Advantage</button>
         <button id="redirectBtn" onclick="handleStageButton(2)" disabled>Redirect the Flow</button>
         <button id="resetBtn" class="reset-button" onclick="resetVisualization()" title="Reset visualization">
-            <span class="reset-icon">↻</span>
+            <svg class="reset-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 12C4 7.58172 7.58172 4 12 4C14.5264 4 16.7792 5.17107 18.2454 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M20 12C20 16.4183 16.4183 20 12 20C9.47363 20 7.22075 18.8289 5.75463 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M15 7L18.5 7L18.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 17L5.5 17L5.5 20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
         </button>
     </div>
     <div class="heatmap-wrapper">
@@ -301,7 +308,7 @@
         <button class="animation-button" onclick="addMoreParticles(20)">More Particles</button>
     </div> -->
     <div class="info-text" id="infoText">
-        Click "Sample Actions" to begin. Particles will flow from left to right, sampling from the current distribution.
+        Flow Policy Optimization
     </div>
 
     <script>
@@ -1037,19 +1044,19 @@
                 startAnimation();
             }
             
-            updateInfoText("Sampling actions... Particles are flowing through the current distribution.");
+            updateInfoText("Sampling actions...");
             
             // After a longer duration, stop adding new particles (using tracked timeout)
             setTrackedTimeout(() => {
                 if (currentStage !== 0) return; // Check if stage changed
                 particleRate = 0; // Stop adding particles
                 stageData.samplingActive = false;
-                updateInfoText("Sampling in progress... Particles are accumulating at the end.");
+                // updateInfoText("Sampling in progress... Particles are accumulating at the end.");
                 
                 // Wait longer for particles to reach the end, then auto-progress to stage 1
                 setTrackedTimeout(() => {
                     if (currentStage === 0) {
-                        updateInfoText("Sampling complete! Auto-progressing to advantage scaling...");
+                        // updateInfoText("Sampling complete! Auto-progressing to advantage scaling...");
                         setTrackedTimeout(() => {
                             if (currentStage === 0) {
                                 startStage1(); // Auto-progress to stage 1
@@ -1137,12 +1144,13 @@
             // Update plot to show scaled distribution
             plotFlow();
             
-            updateInfoText(`Fitted ${stageData.centroids.length} centroids and scaled by advantage! The data distribution now shows the advantage-weighted centroids.`);
+            // updateInfoText(`Fitted ${stageData.centroids.length} centroids and scaled by advantage! The data distribution now shows the advantage-weighted centroids.`);
+            updateInfoText(`Data distribution updated to the sample distribution scaled by advantage.`);
             
             // Auto-progress to stage 2 (using tracked timeout)
             setTrackedTimeout(() => {
                 if (currentStage !== 1) return; // Check if stage changed
-                updateInfoText("Auto-progressing to flow redirection...");
+                // updateInfoText("Auto-progressing to flow redirection...");
                 setTrackedTimeout(() => {
                     if (currentStage === 1) {
                         startStage2(); // Auto-progress to stage 2
@@ -1167,7 +1175,7 @@
             // Clear particles for a clean transition
             particles = [];
             
-            updateInfoText("Redirecting the flow... Watch as the distribution smoothly transitions.");
+            updateInfoText("Redirecting the marginal flow...");
             
             // Start the transition animation
             animateDistributionTransition();
