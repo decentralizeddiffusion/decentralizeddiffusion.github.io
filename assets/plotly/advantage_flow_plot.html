@@ -184,6 +184,46 @@
             opacity: 1.0; /* Changed from 0.4 to 1.0 for normal contrast */
         }
         
+        /* Reset button styling */
+        .reset-button {
+            width: 50px !important;
+            height: 50px !important;
+            border-radius: 8px !important;
+            padding: 0 !important;
+            background-color: #666 !important;
+            opacity: 1.0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin-left: 20px !important;
+        }
+        
+        .reset-button:hover {
+            background-color: #555 !important;
+            opacity: 1.0 !important;
+            transform: translateY(-2px) !important;
+        }
+        
+        .reset-button.active {
+            background-color: #666 !important;
+        }
+        
+        .reset-icon {
+            font-size: 24px;
+            color: white;
+            font-weight: bold;
+            line-height: 1;
+        }
+        
+        /* Responsive design for reset button */
+        @media (max-width: 768px) {
+            .reset-button {
+                width: 50px !important;
+                height: 50px !important;
+                margin-left: 10px !important;
+            }
+        }
+        
         /* Responsive design for top buttons */
         @media (max-width: 768px) {
             .top-buttons {
@@ -209,6 +249,35 @@
                 width: 300px;
             }
         }
+
+        /* New CSS for the reset button */
+        .reset-button {
+            background-color: #FF9800; /* Orange color for reset */
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .reset-button:hover {
+            background-color: #F57C00; /* Darker orange on hover */
+        }
+
+        .reset-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .reset-icon {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -216,6 +285,9 @@
         <button id="sampleBtn" onclick="handleStageButton(0)">Sample Actions</button>
         <button id="advantageBtn" onclick="handleStageButton(1)" disabled>Scale by Advantage</button>
         <button id="redirectBtn" onclick="handleStageButton(2)" disabled>Redirect the Flow</button>
+        <button id="resetBtn" class="reset-button" onclick="resetVisualization()" title="Reset visualization">
+            <span class="reset-icon">↻</span>
+        </button>
     </div>
     <div class="heatmap-wrapper">
         <div id="visualization-container">
@@ -482,12 +554,16 @@
             for (let mode of modes) {
                 const meanAtT = t * mode.mean;
                 const varAtT = t * t * mode.std * mode.std + (1 - t) * (1 - t) * priorStd * priorStd;
-                const stdAtT = Math.sqrt(varAtT);
+                const stdAtT = Math.sqrt(Math.max(0.01, varAtT)); // Prevent very small std
                 
-                pdf += mode.weight * gaussianPDF(x, meanAtT, stdAtT);
+                const modeContribution = mode.weight * gaussianPDF(x, meanAtT, stdAtT);
+                if (isFinite(modeContribution)) {
+                    pdf += modeContribution;
+                }
             }
             
-            return pdf;
+            // Cap the maximum PDF value to prevent extreme values
+            return Math.min(pdf, 50); // Reasonable upper limit for PDF values
         }
         
         // Compute posterior probabilities and means for each Gaussian component given x_t
@@ -637,7 +713,7 @@
                 // Calculate standard deviation
                 const variance = centroid.points.reduce((sum, p) => 
                     sum + Math.pow(p - centroid.mean, 2), 0) / centroid.count;
-                const std = Math.max(0.15, Math.sqrt(variance)); // Minimum std
+                const std = Math.max(0.15, Math.sqrt(variance)); // Increased minimum std from 0.15
                 
                 return {
                     mean: centroid.mean,
@@ -777,15 +853,17 @@
                 const newIdx = oldToNew[oldIdx];
                 if (newIdx !== -1) {
                     // Interpolate between matched modes
+                    const interpolatedStd = oldModes[oldIdx].std * (1 - t) + newModes[newIdx].std * t;
                     interpolatedModes.push({
                         mean: oldModes[oldIdx].mean * (1 - t) + newModes[newIdx].mean * t,
-                        std: oldModes[oldIdx].std * (1 - t) + newModes[newIdx].std * t,
+                        std: Math.max(0.1, interpolatedStd), // Prevent std from becoming too small
                         weight: oldModes[oldIdx].weight * (1 - t) + newModes[newIdx].weight * t
                     });
                 } else {
                     // Old mode fading out (no match found)
                     interpolatedModes.push({
                         ...oldModes[oldIdx],
+                        std: Math.max(0.1, oldModes[oldIdx].std), // Ensure minimum std
                         weight: oldModes[oldIdx].weight * (1 - t)
                     });
                 }
@@ -797,6 +875,7 @@
                     // New mode fading in
                     interpolatedModes.push({
                         ...newModes[newIdx],
+                        std: Math.max(0.1, newModes[newIdx].std), // Ensure minimum std
                         weight: newModes[newIdx].weight * t
                     });
                 }
@@ -808,8 +887,20 @@
                 interpolatedModes.forEach(mode => mode.weight /= totalWeight);
             }
             
-            // Filter out modes with very small weights to avoid visual artifacts
-            const filteredModes = interpolatedModes.filter(mode => mode.weight > 0.001);
+            // Filter out modes with very small weights and validate std values
+            const filteredModes = interpolatedModes.filter(mode => {
+                return mode.weight > 0.001 && mode.std > 0.05 && isFinite(mode.mean) && isFinite(mode.std);
+            });
+            
+            // Fallback: if no valid modes remain, use a safe default
+            if (filteredModes.length === 0) {
+                console.warn('No valid modes after filtering, using fallback');
+                filteredModes.push({
+                    mean: 0,
+                    std: 0.3,
+                    weight: 1.0
+                });
+            }
             
             customDataModes[currentDataType] = filteredModes;
             plotFlow();
@@ -827,11 +918,14 @@
             // Clean up animation state
             resetAnimationState();
             
-            // Auto-restart the cycle after a brief pause
-            setTimeout(() => {
+            // Auto-restart the cycle after a brief pause (using tracked timeout)
+            setTrackedTimeout(() => {
+                if (currentStage !== 2) return; // Check if stage changed
                 updateInfoText("Transition complete! Restarting cycle...");
-                setTimeout(() => {
-                    startStage0(); // Auto-restart the cycle
+                setTrackedTimeout(() => {
+                    if (currentStage === 2) {
+                        startStage0(); // Auto-restart the cycle
+                    }
                 }, 3000);
             }, 1000);
         }
@@ -945,45 +1039,114 @@
             
             updateInfoText("Sampling actions... Particles are flowing through the current distribution.");
             
-            // After a longer duration, stop adding new particles
-            setTimeout(() => {
+            // After a longer duration, stop adding new particles (using tracked timeout)
+            setTrackedTimeout(() => {
+                if (currentStage !== 0) return; // Check if stage changed
                 particleRate = 0; // Stop adding particles
                 stageData.samplingActive = false;
                 updateInfoText("Sampling in progress... Particles are accumulating at the end.");
                 
                 // Wait longer for particles to reach the end, then auto-progress to stage 1
-                setTimeout(() => {
+                setTrackedTimeout(() => {
                     if (currentStage === 0) {
                         updateInfoText("Sampling complete! Auto-progressing to advantage scaling...");
-                        setTimeout(() => {
-                            startStage1(); // Auto-progress to stage 1
+                        setTrackedTimeout(() => {
+                            if (currentStage === 0) {
+                                startStage1(); // Auto-progress to stage 1
+                            }
                         }, 1000);
                     }
-                }, 6000); // Increased from 3000 to 6000 (6 seconds)
-            }, 2000); // Increased from 2000 to 4000 (4 seconds)
+                }, 6000);
+            }, 2000);
         }
         
+        // Generate synthetic samples from the current data distribution
+        function generateSyntheticSamples(numSamples, type) {
+            const samples = [];
+            const modes = getDataModes(type);
+            
+            for (let i = 0; i < numSamples; i++) {
+                // Sample from mixture of Gaussians
+                const rand = Math.random();
+                let cumulativeWeight = 0;
+                let selectedMode = modes[0];
+                
+                for (let mode of modes) {
+                    cumulativeWeight += mode.weight;
+                    if (rand <= cumulativeWeight) {
+                        selectedMode = mode;
+                        break;
+                    }
+                }
+                
+                // Sample from the selected mode
+                const sample = selectedMode.mean + selectedMode.std * sampleStandardNormal();
+                samples.push(Math.max(xMin + 0.1, Math.min(xMax - 0.1, sample)));
+            }
+            
+            return samples;
+        }
+
         // Start Stage 1: Scale by Advantage
         function startStage1() {
             currentStage = 1;
             updateButtonStates();
             
-            // Fit k centroids to the particle end positions
-            stageData.centroids = kMeansClustering(stageData.particleEndPositions, numCentroids);
+            // Check if we have enough particle samples
+            const minSamples = 20;
+            let samplesForClustering = stageData.particleEndPositions;
+            
+            if (samplesForClustering.length < minSamples) {
+                console.warn(`Only ${samplesForClustering.length} particle samples collected, generating synthetic samples`);
+                const syntheticSamples = generateSyntheticSamples(50, currentDataType);
+                samplesForClustering = [...samplesForClustering, ...syntheticSamples];
+                updateInfoText(`Generated ${syntheticSamples.length} synthetic samples due to insufficient particle data.`);
+            }
+            
+            // Fit k centroids to the particle end positions (or synthetic samples)
+            stageData.centroids = kMeansClustering(samplesForClustering, numCentroids);
+            
+            // Validate centroids
+            if (stageData.centroids.length === 0) {
+                console.warn('K-means clustering failed, using fallback centroids');
+                const modes = getDataModes(currentDataType);
+                stageData.centroids = modes.map(mode => ({
+                    mean: mode.mean,
+                    std: Math.max(0.2, mode.std),
+                    count: 10,
+                    weight: mode.weight
+                }));
+            }
             
             // Apply advantage scaling to centroids
             stageData.scaledCentroids = applyAdvantageScaling(stageData.centroids);
+            
+            // Validate scaled centroids
+            if (stageData.scaledCentroids.length === 0) {
+                console.warn('Advantage scaling failed, using fallback');
+                stageData.scaledCentroids = [{
+                    mean: 0,
+                    std: 0.3,
+                    count: 10,
+                    weight: 1.0,
+                    advantage: 1.0,
+                    scaledWeight: 1.0
+                }];
+            }
             
             // Update plot to show scaled distribution
             plotFlow();
             
             updateInfoText(`Fitted ${stageData.centroids.length} centroids and scaled by advantage! The data distribution now shows the advantage-weighted centroids.`);
             
-            // Auto-progress to stage 2
-            setTimeout(() => {
+            // Auto-progress to stage 2 (using tracked timeout)
+            setTrackedTimeout(() => {
+                if (currentStage !== 1) return; // Check if stage changed
                 updateInfoText("Auto-progressing to flow redirection...");
-                setTimeout(() => {
-                    startStage2(); // Auto-progress to stage 2
+                setTrackedTimeout(() => {
+                    if (currentStage === 1) {
+                        startStage2(); // Auto-progress to stage 2
+                    }
                 }, 1000);
             }, 2000);
         }
@@ -1010,6 +1173,104 @@
             animateDistributionTransition();
         }
         
+        // Track all active timeouts for proper cleanup
+        let activeTimeouts = [];
+        
+        // Helper function to set trackable timeouts
+        function setTrackedTimeout(callback, delay) {
+            const timeoutId = setTimeout(() => {
+                // Remove from active timeouts when it executes
+                activeTimeouts = activeTimeouts.filter(id => id !== timeoutId);
+                callback();
+            }, delay);
+            activeTimeouts.push(timeoutId);
+            return timeoutId;
+        }
+        
+        // Clear all active timeouts
+        function clearAllTimeouts() {
+            activeTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+            activeTimeouts = [];
+        }
+        
+        // Reset the entire visualization
+        function resetVisualization() {
+            console.log('Resetting visualization');
+            
+            // Clear ALL pending timeouts first
+            clearAllTimeouts();
+            
+            // Stop any ongoing animations
+            stopAnimation();
+            resetAnimationState();
+            
+            // Reset all state
+            currentStage = -1;
+            particles = [];
+            stageData = {
+                particleEndPositions: [],
+                centroids: [],
+                scaledCentroids: [],
+                targetModes: null,
+                transitionProgress: 0,
+                samplingActive: false
+            };
+            
+            // Reset data modes to original values
+            customDataModes = {
+                bimodal: [
+                    {mean: -0.7, std: 0.3, weight: 0.6},
+                    {mean: 0.7, std: 0.3, weight: 0.4}
+                ],
+                trimodal: [
+                    {mean: -1, std: 0.3, weight: 0.33},
+                    {mean: 0, std: 0.3, weight: 0.34},
+                    {mean: 1, std: 0.3, weight: 0.33}
+                ]
+            };
+            
+            // Reset advantage modes to original values
+            advantageModes = [
+                {mean: -0.5, std: 0.4, weight: 0.45},
+                {mean: 0.6, std: 0.3, weight: 0.55}
+            ];
+            
+            // Reset data trace animation
+            dataTraceAnimation = {
+                isAnimating: false,
+                startTime: null,
+                duration: 1000,
+                startDataY: null,
+                targetDataY: null,
+                currentDataY: null
+            };
+            
+            // Reset animation state
+            animationState = {
+                transitionStartTime: null,
+                maxTransitionDuration: 15000,
+                lastProgressCheck: null,
+                stuckCheckInterval: null
+            };
+            
+            // Reset button states
+            updateButtonStates();
+            
+            // Reset info text
+            updateInfoText("Visualization reset. Ready to start a new cycle.");
+            
+            // Replot and restart
+            plotFlow();
+            startAnimation();
+            
+            // Auto-start after a brief delay (using tracked timeout)
+            setTrackedTimeout(() => {
+                if (currentStage === -1) { // Only start if still in reset state
+                    startStage0();
+                }
+            }, 2000);
+        }
+        
         // Update button states based on current stage
         function updateButtonStates() {
             const buttons = ['sampleBtn', 'advantageBtn', 'redirectBtn'];
@@ -1023,6 +1284,13 @@
                 // Disable all buttons since we're in autoplay mode
                 btn.disabled = true;
             });
+            
+            // Reset button is always enabled and never has active state
+            const resetBtn = document.getElementById('resetBtn');
+            if (resetBtn) {
+                resetBtn.disabled = false;
+                resetBtn.classList.remove('active');
+            }
         }
         
         // Update info text
@@ -1588,7 +1856,7 @@
                         font: {size: 20, color: '#18327E', weight: 'bold'}
                     },
                     {
-                        text: 'Advantage',
+                        text: 'Reward',
                         x: 0.87,
                         y: 1.15,
                         xref: 'paper',
